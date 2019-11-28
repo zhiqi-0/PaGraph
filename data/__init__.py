@@ -1,3 +1,3 @@
 
-from .load_data import *
+from .get_data import *
 from .preprocess import *
