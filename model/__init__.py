@@ -1,1 +1,1 @@
-from .gcn_sample import *
+from .gcn_ns import *
