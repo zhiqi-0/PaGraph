@@ -3,19 +3,21 @@ Preprocess dataset to fit the input
 """
 
 import numpy as np
+import scipy.sparse
+import os
+import sys
+import argparse
 
-def pp2adj(filepath, is_direct=True, delimiter=' ',
+def pp2adj(filepath, is_direct=True, delimiter='\t',
            outfile=None):
   """
   Convert (vertex vertex) tuple into numpy adj matrix
-  If vnum is not provided, vnum := max(vid) - min(vid) + 1
-  Similar to enum.
   adj matrix will be returned.
   If outfile is provided, also save it.
   """
   pp = np.loadtxt(filepath, delimiter=delimiter)
-  src_node = np.int(pp[0,:])
-  dst_node = np.int(pp[1,:])
+  src_node = np.int(pp[:,0])
+  dst_node = np.int(pp[:,1])
   max_nid = max(np.max(src_node), np.max(dst_node))
   min_nid = min(np.min(src_node), np.min(dst_node))
   vnum = max_nid - min_nid + 1
@@ -24,14 +26,15 @@ def pp2adj(filepath, is_direct=True, delimiter=' ',
   src_node -= min_nid
   dst_node -= min_nid
   print('vertex#: {} edge#: {}'.format(vnum, enum))
-  # create numpy adj matrix
+  # create numpy adj matrix in coo format
   adj = np.int(np.zeros((vnum, vnum)))
   adj[src_node, dst_node] = 1
   if not is_direct:
     adj[dst_node, src_node] = 1
+  coo_adj = scipy.sparse.coo_matrix(adj)
   # output to file
   if outfile is not None:
-    np.save(outfile, adj)
+    scipy.sparse.save_npz(outfile, coo_adj)
   return adj
 
 
@@ -49,3 +52,123 @@ def random_feature(vnum, feat_size, outfile=None):
   if outfile:
     np.save(outfile, feat_mat)
   return feat_mat
+
+
+def random_label(vnum, class_num, outfile=None):
+  """
+  Generate random labels from 0 - class_num for each node
+  Params:
+    vnum:       total node num
+    class_num:  number of classes, start from 0
+    outfile:    save to the file if provided
+  Returns:
+    numpy array obj with shape of (vnum,).
+    Each element denotes corresponding nodes labels
+  """
+  labels = np.random.randint(class_num, size=vnum)
+  if outfile:
+    np.save(outfile, labels)
+  return labels
+
+
+def split_dataset(vnum, outdir=None):
+  """
+  Split dataset to train/val/test.
+  train:val:test = 7:1:2
+  if outdir is provided:
+    save as outdir/train.npy,
+            outdir/val.npy,
+            outdir/test.npy
+  Return:
+    3 ndarrays with train, val, test mask.
+    All of them is of (vnum,) size with 0 or 1 indicator. 
+  """
+  nids = np.arange(vnum)
+  np.random.shuffle(nids)
+  train_len = int(vnum * 0.7)
+  val_len = int(vnum * 0.1)
+  test_len = vnum - train_len - val_len
+  # train mask
+  train_mask = np.int(np.ones(vnum))
+  train_mask[0:train_len] = 0
+  # val mask
+  val_mask = np.int(np.ones(vnum))
+  val_mask[train_len:train_len + val_len] = 0
+  # test mask
+  test_mask = np.int(np.ones(vnum))
+  test_mask[-test_len:] = 0
+  # save
+  if outdir is not None:
+    np.save(os.path.join(outdir, 'train.npy'), train_mask)
+    np.save(os.path.join(outdir, 'val.npy'), val_mask)
+    np.save(os.path.join(outdir, 'test.npy'), test_mask)
+  return train_mask, val_mask, test_mask
+
+
+if __name__ == '__main__':
+
+  parser = argparse.ArgumentParser(description='Preprocess')
+
+  parser.add_argument("--dataset", type=str, default=None,
+                      help="dataset dir")
+
+  parser.add_argument("--ppfile", type=str, default=None,
+                      help='point-to-point graph filename')
+  parser.add_argument("--directed", dest="directed", action='store_true')
+  parser.set_defaults(directed=False)
+
+  parser.add_argument("--gen-feature", dest='gen_feature', action='store_true')
+  parser.set_defaults(gen_feature=False)
+  parser.add_argument("--feat-size", type=int, default=300,
+                      help='generated feature size if --gen-feature is specified')
+  
+  parser.add_argument("--gen-label", dest='gen_label', action='store_true')
+  parser.set_defaults(gen_label=False)
+  parser.add_argument("--class-num", type=int, default=60,
+                      help='generated class number if --gen-label is specified')
+  
+  parser.add_argument("--gen-set", dest='gen_set', action='store_true')
+
+  parser.set_defaults(gen_set=False)
+  args = parser.parse_args()
+
+  if not os.path.exists(args.dataset):
+    print('{}: No such a dataset folder'.format(args.dataset))
+    sys.exit(-1)
+  
+  # generate adj
+  adj_file = os.path.join(args.dataset, 'adj.npz')
+  if args.ppfile is not None:
+    print('Generating adj matrix in: {}...'.format(adj_file))
+    adj = pp2adj(
+      os.path.join(args.dataset, args.ppfile),
+      is_direct=args.directed,
+      outfile=adj_file
+    )
+  else:
+    adj = np.load(adj_file)
+  vnum = adj.shape[0]
+
+  # generate features
+  feat_file = os.path.join(args.dataset, 'feat.npy')
+  if args.gen_feature:
+    print('Generating random features (size: {}) in: {}...'
+          .format(args.feat_size, feat_file))
+    feat = random_feature(vnum, args.feat_size, 
+                          outfile=feat_file)
+  
+  # generate labels
+  label_file = os.path.join(args.dataset, 'labels.npy')
+  if args.gen_label:
+    print('Generating labels (class num: {}) in: {}...'
+          .format(args.class_num, feat_file))
+    labels = random_label(vnum, args.class_num,
+                          outfile=label_file)
+  
+  # generate train/val/test set
+  if args.gen_set:
+    print('Generating train/val/test masks in: {}...'
+          .format(args.dataset))
+    split_dataset(vnum, outdir=args.dataset)
+  
+  print('Done.')

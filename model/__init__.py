@@ -1,1 +1,0 @@
-from .gcn_ns import *

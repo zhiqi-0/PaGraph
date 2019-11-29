@@ -1,4 +1,13 @@
 import os
+import sys
+# set environment
+module_name ='PaGraph'
+modpath = os.path.abspath('.')
+if module_name in modpath:
+  idx = modpath.find(module_name)
+  modpath = modpath[:idx]
+sys.path.append(modpath)
+
 import argparse, time
 import torch
 import torch.nn as nn
@@ -7,7 +16,6 @@ import torch.multiprocessing as mp
 import torch.nn.functional as F
 import numpy as np
 import dgl
-from dgl.data import register_data_args
 
 from PaGraph.model.gcn_ns import GCNSampling, GCNInfer
 
@@ -101,7 +109,7 @@ def trainer(rank, world_size, args, backend='nccl'):
     for infer_param, param in zip(infer_model.parameters(), model.module.parameters()):    
       infer_param.data.copy_(param.data)
     num_acc = 0.
-    for nf in dgl.contrib.sampling.NeighborSampler(g, args.test_batch_size,
+    for nf in dgl.contrib.sampling.NeighborSampler(g, args.batch_size,
                                                          g.number_of_nodes(),
                                                          neighbor_type='in',
                                                          num_workers=32,
@@ -131,8 +139,6 @@ if __name__ == '__main__':
           help="number of training epochs")
   parser.add_argument("--batch-size", type=int, default=1000,
           help="batch size")
-  parser.add_argument("--test-batch-size", type=int, default=1000,
-          help="test batch size")
   parser.add_argument("--num-neighbors", type=int, default=3,
           help="number of neighbors to be sampled")
   parser.add_argument("--n-hidden", type=int, default=16,
