@@ -18,6 +18,7 @@ import numpy as np
 import dgl
 
 from PaGraph.model.gcn_ns import GCNSampling, GCNInfer
+import PaGraph.data as data
 
 def init_process(rank, world_size, backend):
   os.environ['MASTER_ADDR'] = '127.0.0.1'
@@ -30,26 +31,24 @@ def init_process(rank, world_size, backend):
 def trainer(rank, world_size, args, backend='nccl'):
   # init multi process
   init_process(rank, world_size, backend)
+  
   # load data
-  g = dgl.contrib.graph_store.create_graph_from_store(args.dataset, "shared_mem")
-  features = g.nodes[:].data['features']
-  norm = g.nodes[:].data['norm']
-  labels = g.nodes[:].data['labels']
-  train_mask = g.nodes[:].data['train_mask']
-  val_mask = g.nodes[:].data['val_mask']
-  test_mask = g.nodes[:].data['test_mask']
-  in_feats = features.shape[1]
-  n_classes = len(np.unique(labels.numpy()))
-
-  n_train_samples = train_mask.sum().item()
-  n_val_samples = val_mask.sum().item()
-  n_test_samples = test_mask.sum().item()
-
-  train_nid = np.nonzero(train_mask.numpy())[0].astype(np.int64)
-  test_nid = np.nonzero(test_mask.numpy())[0].astype(np.int64)
+  dataname = os.path.basename(args.dataset)
+  g = dgl.contrib.graph_store.create_graph_from_store(dataname, "shared_mem")
+  labels = data.get_labels(args.dataset)
+  n_classes = len(np.unique(labels))
+  # masks for semi-supervised learning
+  train_mask, val_mask, test_mask = data.get_masks(args.dataset)
+  train_nid = np.nonzero(train_mask)[0].astype(np.int64)
+  test_nid = np.nonzero(test_mask)[0].astype(np.int64)
+  # to torch tensor
+  labels = torch.LongTensor(labels)
+  train_mask = torch.ByteTensor(train_mask)
+  val_mask = torch.ByteTensor(val_mask)
+  test_mask = torch.ByteTensor(test_mask)
 
   # prepare model
-  model = GCNSampling(in_feats,
+  model = GCNSampling(args.feat_size,
                       args.n_hidden,
                       n_classes,
                       args.n_layers,
@@ -81,7 +80,7 @@ def trainer(rank, world_size, args, backend='nccl'):
       batch_start_time = time.time()
       nf.copy_from_parent(ctx=ctx)
       batch_nids = nf.layer_parent_nid(-1)
-      label = g.nodes[batch_nids].data['labels']
+      label = labels[batch_nids]
       label = label.cuda(rank, non_blocking=True)
       
       pred = model(nf)
@@ -93,8 +92,8 @@ def trainer(rank, world_size, args, backend='nccl'):
       step += 1
       batch_dur.append(time.time() - batch_start_time)
       if rank == 0 and step % 1 == 0:
-        print('epoch [{}] step [{}]. Batch average time(s): {:.4f}'
-              .format(epoch + 1, step, np.mean(np.array(batch_dur))))
+        print('epoch [{}] step [{}]. Loss: {:.4f} Batch average time(s): {:.4f}'
+              .format(epoch + 1, step, loss.item(), np.mean(np.array(batch_dur))))
     if rank == 0:
       epoch_dur.append(time.time() - epoch_start_time)
       print('Epoch average time: {:.4f}'.format(np.mean(np.array(epoch_dur[2:]))))
@@ -128,27 +127,33 @@ def trainer(rank, world_size, args, backend='nccl'):
 
 if __name__ == '__main__':
   parser = argparse.ArgumentParser(description='GCN')
-  register_data_args(parser)
-  parser.add_argument("--dropout", type=float, default=0.5,
-          help="dropout probability")
+
   parser.add_argument("--gpu", type=str, default='cpu',
-          help="gpu ids. such as 0 or 0,1,2")
-  parser.add_argument("--lr", type=float, default=3e-2,
-          help="learning rate")
-  parser.add_argument("--n-epochs", type=int, default=200,
-          help="number of training epochs")
-  parser.add_argument("--batch-size", type=int, default=1000,
-          help="batch size")
-  parser.add_argument("--num-neighbors", type=int, default=3,
-          help="number of neighbors to be sampled")
-  parser.add_argument("--n-hidden", type=int, default=16,
-          help="number of hidden gcn units")
+                      help="gpu ids. such as 0 or 0,1,2")
+  parser.add_argument("--dataset", type=str, default=None,
+                      help="path to the dataset folder")
+  # model arch
+  parser.add_argument("--feat-size", type=int, default=300,
+                      help='input feature size')
+  parser.add_argument("--dropout", type=float, default=0.5,
+                      help="dropout probability")
+  parser.add_argument("--n-hidden", type=int, default=32,
+                      help="number of hidden gcn units")
   parser.add_argument("--n-layers", type=int, default=1,
-          help="number of hidden gcn layers")
-  parser.add_argument("--self-loop", action='store_true',
-          help="graph self-loop (default=False)")
+                      help="number of hidden gcn layers")
+  # training hyper-params
+  parser.add_argument("--lr", type=float, default=3e-2,
+                      help="learning rate")
+  parser.add_argument("--n-epochs", type=int, default=60,
+                      help="number of training epochs")
+  parser.add_argument("--batch-size", type=int, default=10000,
+                      help="batch size")
   parser.add_argument("--weight-decay", type=float, default=5e-4,
-          help="Weight for L2 loss")
+                      help="Weight for L2 loss")
+  # sampling hyper-params
+  parser.add_argument("--num-neighbors", type=int, default=10,
+                      help="number of neighbors to be sampled")
+  
   args = parser.parse_args()
 
   os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu

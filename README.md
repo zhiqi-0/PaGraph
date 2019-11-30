@@ -35,5 +35,5 @@ $ python launch/launch_server.py --dataset xxx/datasetfolder --num-workers 3
 * Run w/o Partitioning
 
   ```bash
-  $ DGLBACKEND=pytorch python examples/gcn_client_nccl_ns.py --gpu 0,1 --dataset datasetfolder --num-neighbors 10 --batch-size 30000
+  $ DGLBACKEND=pytorch python examples/gcn_client_nccl_ns.py --gpu 0,1 --dataset /path/to/datasetfolder --num-neighbors 10 --batch-size 30000
   ```

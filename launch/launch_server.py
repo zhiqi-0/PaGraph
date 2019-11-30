@@ -37,7 +37,7 @@ def main(args):
   g = dgl.contrib.graph_store.create_graph_store_server(
         graph, graph_name,
         'shared_mem', args.num_workers, 
-        False, edge_dirs='in')
+        False, edge_dir='in')
   
   # calculate norm for gcn
   dgl_g = DGLGraph(graph, readonly=True)
