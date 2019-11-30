@@ -19,24 +19,25 @@ import PaGraph.data as data
 def main(args):
   coo_adj, feat = data.get_graph_data(args.dataset)
 
-  graph_name = args.dataset
   graph = dgl.DGLGraph(coo_adj, readonly=True)
   features = torch.FloatTensor(feat)
 
+  graph_name = os.path.basename(args.dataset)
   vnum = graph.number_of_nodes()
   enum = graph.number_of_edges()
   feat_size = feat.shape[1]
 
   print('=' * 30)
-  print("Nodes Num: {}\tEdges Num: {}\nFeature Size: {}"
-        .format(vnum, enum, feat_size)
+  print("Graph Name: {}\nNodes Num: {}\tEdges Num: {}\nFeature Size: {}"
+        .format(graph_name, vnum, enum, feat_size)
   )
+  print('=' * 30)
 
   # create server
   g = dgl.contrib.graph_store.create_graph_store_server(
-        data.graph, graph_name,
+        graph, graph_name,
         'shared_mem', args.num_workers, 
-        False, edge_dir='in')
+        False, edge_dirs='in')
   
   # calculate norm for gcn
   dgl_g = DGLGraph(graph, readonly=True)
@@ -53,7 +54,6 @@ def main(args):
 
 if __name__ == '__main__':
   parser = argparse.ArgumentParser(description='GraphServer')
-  register_data_args(parser)
 
   parser.add_argument("--dataset", type=str, default=None,
                       help="dataset folder path")
