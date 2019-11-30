@@ -16,26 +16,35 @@ def pp2adj(filepath, is_direct=True, delimiter='\t',
   If outfile is provided, also save it.
   """
   pp = np.loadtxt(filepath, delimiter=delimiter)
-  src_node = np.int(pp[:,0])
-  dst_node = np.int(pp[:,1])
+  src_node = pp[:,0].astype(np.int)
+  dst_node = pp[:,1].astype(np.int)
   max_nid = max(np.max(src_node), np.max(dst_node))
+  print('max_nid:{}'.format(max_nid))
   min_nid = min(np.min(src_node), np.min(dst_node))
+  print('min_nid:{}'.format(min_nid))
+
+  # get vertex and ege num info
   vnum = max_nid - min_nid + 1
-  enum = len(src_node)
+  enum = len(src_node) if is_direct else len(src_node) * 2
+  print('vertex#: {} edge#: {}'.format(vnum, enum))
+
   # scale node id from 0
   src_node -= min_nid
   dst_node -= min_nid
-  print('vertex#: {} edge#: {}'.format(vnum, enum))
-  # create numpy adj matrix in coo format
-  adj = np.int(np.zeros((vnum, vnum)))
-  adj[src_node, dst_node] = 1
+
+  # make coo sparse adj matrix
   if not is_direct:
-    adj[dst_node, src_node] = 1
-  coo_adj = scipy.sparse.coo_matrix(adj)
+    src_node, dst_node = np.concatenate((src_node, dst_node)), \
+                         np.concatenate((dst_node, src_node))
+  edge_weight = np.ones(enum, dtype=np.int)
+  coo_adj = scipy.sparse.coo_matrix(
+    (edge_weight, (src_node, dst_node)),
+    shape=(vnum, vnum)
+  )
   # output to file
   if outfile is not None:
     scipy.sparse.save_npz(outfile, coo_adj)
-  return adj
+  return coo_adj
 
 
 def random_feature(vnum, feat_size, outfile=None):
@@ -48,7 +57,7 @@ def random_feature(vnum, feat_size, outfile=None):
   Returns:
     numpy array obj with shape of [vnum, feat_size]
   """
-  feat_mat = np.float32(np.random((vnum, feat_size)))
+  feat_mat = np.random.random((vnum, feat_size)).astype(np.float32)
   if outfile:
     np.save(outfile, feat_mat)
   return feat_mat
@@ -89,14 +98,14 @@ def split_dataset(vnum, outdir=None):
   val_len = int(vnum * 0.1)
   test_len = vnum - train_len - val_len
   # train mask
-  train_mask = np.int(np.ones(vnum))
-  train_mask[0:train_len] = 0
+  train_mask = np.ones(vnum, dtype=np.int)
+  train_mask[nids[0:train_len]] = 0
   # val mask
-  val_mask = np.int(np.ones(vnum))
-  val_mask[train_len:train_len + val_len] = 0
+  val_mask = np.ones(vnum, dtype=np.int)
+  val_mask[nids[train_len:train_len + val_len]] = 0
   # test mask
-  test_mask = np.int(np.ones(vnum))
-  test_mask[-test_len:] = 0
+  test_mask = np.ones(vnum, dtype=np.int)
+  test_mask[nids[-test_len:]] = 0
   # save
   if outdir is not None:
     np.save(os.path.join(outdir, 'train.npy'), train_mask)
@@ -146,8 +155,9 @@ if __name__ == '__main__':
       outfile=adj_file
     )
   else:
-    adj = np.load(adj_file)
+    adj = scipy.sparse.load_npz(adj_file)
   vnum = adj.shape[0]
+  del adj
 
   # generate features
   feat_file = os.path.join(args.dataset, 'feat.npy')
