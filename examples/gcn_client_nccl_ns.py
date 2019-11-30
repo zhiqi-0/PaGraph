@@ -99,11 +99,11 @@ def trainer(rank, world_size, args, backend='nccl'):
       print('Epoch average time: {:.4f}'.format(np.mean(np.array(epoch_dur[2:]))))
   
   if rank == 0:
-    infer_model = GCNInfer(in_feats,
-                   args.n_hidden,
-                   n_classes,
-                   args.n_layers,
-                   F.relu)
+    infer_model = GCNInfer(args.feat_size,
+                           args.n_hidden,
+                           n_classes,
+                           args.n_layers,
+                           F.relu)
     infer_model.cuda(ctx)
     for infer_param, param in zip(infer_model.parameters(), model.module.parameters()):    
       infer_param.data.copy_(param.data)
@@ -111,7 +111,7 @@ def trainer(rank, world_size, args, backend='nccl'):
     for nf in dgl.contrib.sampling.NeighborSampler(g, args.batch_size,
                                                          g.number_of_nodes(),
                                                          neighbor_type='in',
-                                                         num_workers=32,
+                                                         num_workers=16,
                                                          num_hops=args.n_layers+1,
                                                          seed_nodes=test_nid):
       nf.copy_from_parent(ctx=ctx)

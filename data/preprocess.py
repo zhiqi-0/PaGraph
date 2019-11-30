@@ -99,13 +99,13 @@ def split_dataset(vnum, outdir=None):
   test_len = vnum - train_len - val_len
   # train mask
   train_mask = np.zeros(vnum, dtype=np.int)
-  train_mask[nids[0:train_len]] = 0
+  train_mask[nids[0:train_len]] = 1
   # val mask
   val_mask = np.zeros(vnum, dtype=np.int)
-  val_mask[nids[train_len:train_len + val_len]] = 0
+  val_mask[nids[train_len:train_len + val_len]] = 1
   # test mask
   test_mask = np.zeros(vnum, dtype=np.int)
-  test_mask[nids[-test_len:]] = 0
+  test_mask[nids[-test_len:]] = 1
   # save
   if outdir is not None:
     np.save(os.path.join(outdir, 'train.npy'), train_mask)
