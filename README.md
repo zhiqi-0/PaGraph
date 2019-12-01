@@ -7,7 +7,7 @@ Graph Neural Network Framework on Large Scaled Graph Dataset with Multi-GPUs tra
 
 * For randomly generated dataset:
 
-  * Usa [PaRMAT](https://github.com/farkhor/PaRMAT) to generate a graph:
+  * Use [PaRMAT](https://github.com/farkhor/PaRMAT) to generate a graph:
 
     ```bash
     $ ./PaRMAT -nVertices 10 -nEdges 50 -output /path/to/datafolder/pp.txt -noDuplicateEdges -undirected -threads 16
@@ -37,3 +37,8 @@ $ python launch/launch_server.py --dataset xxx/datasetfolder --num-workers 3
   ```bash
   $ DGLBACKEND=pytorch python examples/gcn_client_nccl_ns.py --gpu 0,1 --dataset /path/to/datasetfolder --num-neighbors 10 --batch-size 30000
   ```
+
+
+## License
+
+This project is under MIT License. 
