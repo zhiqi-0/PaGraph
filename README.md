@@ -7,7 +7,7 @@ Graph Neural Network Framework on Large Scaled Graph Dataset with Multi-GPUs tra
 
 * For randomly generated dataset:
 
-  * Usa PaRMAT to generate a graph:
+  * Usa [PaRMAT](https://github.com/farkhor/PaRMAT) to generate a graph:
 
     ```bash
     $ ./PaRMAT -nVertices 10 -nEdges 50 -output /path/to/datafolder/pp.txt -noDuplicateEdges -undirected -threads 16
