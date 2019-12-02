@@ -53,7 +53,7 @@ class GCNSampling(nn.Module):
       nf.layers[i].data['h'] = h
       nf.block_compute(i,
                        fn.copy_src(src='h', out='m'),
-                       lambda node : {'h': node.mailbox['m'].mean(dim=1)},
+                       fn.mean(msg='m', out='h'),
                        layer)
 
     h = nf.layers[-1].data.pop('activation')

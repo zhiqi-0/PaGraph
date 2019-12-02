@@ -8,7 +8,7 @@ Graph Neural Network Framework on Large Scaled Graph Dataset with Multi-GPUs tra
 
 * PyTorch
 
-* DGL
+* DGL v = 0.4
 
 * numa (pip install numa)
 
@@ -38,13 +38,13 @@ Graph Neural Network Framework on Large Scaled Graph Dataset with Multi-GPUs tra
 * PyTorch
 
   ```bash
-  $ python launch/pytorch/launch_server.py --dataset xxx/datasetfolder --num-workers 3
+  $ python server/pytorch/launch_server.py --dataset xxx/datasetfolder --num-workers 3
   ```
 
 * MXNet
 
   ```bash
-  DGLBACKEND=mxnet python launch/mxnet/launch_server.py --dataset xxx/datasetfolder --num-workers 3
+  DGLBACKEND=mxnet python server/mxnet/launch_server.py --dataset xxx/datasetfolder --num-workers 3
   ```
 
 ### Run Client Trainer

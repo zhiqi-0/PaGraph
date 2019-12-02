@@ -91,7 +91,7 @@ def trainer(rank, world_size, args, backend='nccl'):
 
       step += 1
       batch_dur.append(time.time() - batch_start_time)
-      if rank == 0 and step % 1 == 0:
+      if rank == 0 and step % 20 == 0:
         print('epoch [{}] step [{}]. Loss: {:.4f} Batch average time(s): {:.4f}'
               .format(epoch + 1, step, loss.item(), np.mean(np.array(batch_dur))))
     if rank == 0:

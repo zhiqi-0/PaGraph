@@ -90,7 +90,7 @@ def trainer(args):
       
       step += 1
       batch_dur.append(time.time() - batch_start_time)
-      if g.worker_id == 0:
+      if g.worker_id == 0 and step % 20 == 0:
         print('epoch [{}] step [{}]. Batch average time(s): {:.4f}'
               .format(epoch + 1, step, np.mean(np.array(batch_dur))))
   

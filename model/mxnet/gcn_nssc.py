@@ -58,7 +58,7 @@ class GCNSampling(nn.Module):
             #                 layer)
             nf.block_compute(i,
                              fn.copy_src(src='h', out='m'),
-                             fn.sum(msg='m', out='h'),
+                             fn.mean(msg='m', out='h'),
                              layer)
 
         h = nf.layers[-1].data.pop('activation')
