@@ -17,7 +17,7 @@ import torch.nn.functional as F
 import numpy as np
 import dgl
 
-from PaGraph.model.gcn_ns import GCNSampling, GCNInfer
+from PaGraph.model.pytorch.gcn_nssc import GCNSampling, GCNInfer
 import PaGraph.data as data
 
 def init_process(rank, world_size, backend):
@@ -73,7 +73,7 @@ def trainer(rank, world_size, args, backend='nccl'):
                                                   args.num_neighbors,
                                                   neighbor_type='in',
                                                   shuffle=True,
-                                                  num_workers=8,
+                                                  num_workers=16,
                                                   num_hops=args.n_layers+1,
                                                   seed_nodes=train_nid,
                                                   prefetch=True):
@@ -146,12 +146,12 @@ if __name__ == '__main__':
                       help="learning rate")
   parser.add_argument("--n-epochs", type=int, default=60,
                       help="number of training epochs")
-  parser.add_argument("--batch-size", type=int, default=10000,
+  parser.add_argument("--batch-size", type=int, default=2500,
                       help="batch size")
-  parser.add_argument("--weight-decay", type=float, default=5e-4,
+  parser.add_argument("--weight-decay", type=float, default=0,
                       help="Weight for L2 loss")
   # sampling hyper-params
-  parser.add_argument("--num-neighbors", type=int, default=10,
+  parser.add_argument("--num-neighbors", type=int, default=2,
                       help="number of neighbors to be sampled")
   
   args = parser.parse_args()
