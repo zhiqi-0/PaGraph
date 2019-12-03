@@ -54,11 +54,17 @@ def trainer(rank, world_size, args, backend='nccl'):
                       args.n_layers,
                       F.relu,
                       args.dropout)
+  infer_model = GCNInfer(args.feat_size,
+                         args.n_hidden,
+                         n_classes,
+                         args.n_layers,
+                         F.relu)
   loss_fcn = torch.nn.CrossEntropyLoss()
   optimizer = torch.optim.Adam(model.parameters(),
                                lr=args.lr,
                                weight_decay=args.weight_decay)
   model.cuda(rank)
+  infer_model.cuda(rank)
   model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[rank])
   ctx = torch.device(rank)
 
@@ -97,32 +103,12 @@ def trainer(rank, world_size, args, backend='nccl'):
     if rank == 0:
       epoch_dur.append(time.time() - epoch_start_time)
       print('Epoch average time: {:.4f}'.format(np.mean(np.array(epoch_dur[2:]))))
-  
-  if rank == 0:
-    infer_model = GCNInfer(args.feat_size,
-                           args.n_hidden,
-                           n_classes,
-                           args.n_layers,
-                           F.relu)
-    infer_model.cuda(ctx)
-    for infer_param, param in zip(infer_model.parameters(), model.module.parameters()):    
-      infer_param.data.copy_(param.data)
-    num_acc = 0.
-    for nf in dgl.contrib.sampling.NeighborSampler(g, args.batch_size,
-                                                         g.number_of_nodes(),
-                                                         neighbor_type='in',
-                                                         num_workers=16,
-                                                         num_hops=args.n_layers+1,
-                                                         seed_nodes=test_nid):
-      nf.copy_from_parent(ctx=ctx)
-      infer_model.eval()
-      with torch.no_grad():
-        pred = infer_model(nf)
-        batch_nids = nf.layer_parent_nid(-1).to(device=pred.device, dtype=torch.long)
-        batch_labels = labels[batch_nids].to(ctx)
-        num_acc += (pred.argmax(dim=1) == batch_labels).sum().cpu().item()
-
-    print("Test Accuracy {:.4f}".format(num_acc / n_test_samples))
+    
+    # saving after several epochs
+    if (epoch + 1) % 5 == 0 and rank == 0:
+      filepath = os.path.join(args.ckpt, 'gcn-nssc_{}'.format(epoch + 1))
+      print('saving to {}'.format(filepath))
+      torch.save(model.module, filepath)
 
 
 if __name__ == '__main__':
@@ -135,9 +121,9 @@ if __name__ == '__main__':
   # model arch
   parser.add_argument("--feat-size", type=int, default=300,
                       help='input feature size')
-  parser.add_argument("--dropout", type=float, default=0.5,
+  parser.add_argument("--dropout", type=float, default=0.2,
                       help="dropout probability")
-  parser.add_argument("--n-hidden", type=int, default=32,
+  parser.add_argument("--n-hidden", type=int, default=128,
                       help="number of hidden gcn units")
   parser.add_argument("--n-layers", type=int, default=1,
                       help="number of hidden gcn layers")
@@ -154,10 +140,16 @@ if __name__ == '__main__':
   parser.add_argument("--num-neighbors", type=int, default=2,
                       help="number of neighbors to be sampled")
   
+  parser.add_argument("--ckpt", type=str, default='checkpoint',
+                      help="checkpoint dir")
+  
   args = parser.parse_args()
 
   os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
   gpu_num = len(args.gpu.split(','))
+
+  if not os.path.exists(args.ckpt):
+    os.mkdir(args.ckpt)
 
   mp.spawn(trainer, args=(gpu_num, args), nprocs=gpu_num, join=True)
   

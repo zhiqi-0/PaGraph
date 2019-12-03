@@ -55,6 +55,8 @@ Graph Neural Network Framework on Large Scaled Graph Dataset with Multi-GPUs tra
 
     ```bash
     $ DGLBACKEND=pytorch python examples/pytorch/gcn_nccl_nssc.py --gpu 0,1 --dataset /path/to/datasetfolder --num-neighbors 2 --batch-size 2500
+
+    $ DGLBACKEND=pytorch python examples/pytorch/eval.py --gpu 0 --arch gcn-nssc --batch-size 512 --epoch 30 --feat-siz 602 --dataset /path/to/datasetfolder
     ```
   
   * MXNet
