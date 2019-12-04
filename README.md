@@ -54,7 +54,7 @@ Graph Neural Network Framework on Large Scaled Graph Dataset with Multi-GPUs tra
   * PyTorch
 
     ```bash
-    $ DGLBACKEND=pytorch python examples/pytorch/gcn_nccl_nssc.py --gpu 0,1 --dataset /path/to/datasetfolder --num-neighbors 2 --batch-size 2500
+    $ DGLBACKEND=pytorch python examples/pytorch/gcn_nccl_nssc.py --gpu 0,1 --num-neighbors 2 --batch-size 30000 --dataset /path/to/datasetfolder
 
     $ DGLBACKEND=pytorch python examples/pytorch/eval.py --gpu 0 --arch gcn-nssc --batch-size 512 --epoch 30 --feat-siz 602 --dataset /path/to/datasetfolder
     ```
@@ -69,6 +69,13 @@ Graph Neural Network Framework on Large Scaled Graph Dataset with Multi-GPUs tra
     DGLBACKEND=mxnet python examples/mxnet/launch.py -n 2 -s 1 --launcher local python examples/mxnet/gcn_nssc.py --dataset /home/lzq/data/graph-gen/3mv150me --ngpu 2 --batch-size 2500 --n-epochs 60 --num-neighbors 2
     ```
 
+### Profiling with NVProf
+
+* multi-processes command line:
+
+  ```bash
+  $ nvprof --profile-all-processes --csv --log-file %pprof.csv
+  ```
 
 ## License
 
