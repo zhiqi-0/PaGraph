@@ -1,8 +1,11 @@
 import os
+import argparse
 import numpy as np
 import scipy.sparse as spsp
 import networkx as nx
 from networkx.algorithms.community import kernighan_lin
+
+import .refine
 
 def kl_2partition(coo_adj, outfolder=None):
   """
@@ -77,6 +80,86 @@ def test(draw=False):
 
 
 if __name__ == '__main__':
-  test(draw=True)
+  parser = argparse.ArgumentParser(description='Partition')
 
-    
+  parser.add_argument("--dataset", type=str, defualt=None,
+                      help="dataset dir")
+  
+  parser.add_argument("--train-graph", dest='train_graph', action='store_true')
+  parser.set_defaults(train_graph=False)
+
+  parser.add_argument("--partition", type=int, default=2,
+                      help="num of partitions")
+  
+  parser.add_argument("--wrap-neighbor", dest='wrap_neighbor', action='store_true')
+  parser.set_defaults(wrap_neighbor=False)
+
+  parser.add_argument("--num-hop", type=int, default=1,
+                      help="num of hop neighbors required for a batch")
+  
+  args = parser.parse_args()
+
+  if not os.path.exists(args.dataset):
+    print('{}: No such a dataset folder'.format(args.dataset))
+    sys.exit(-1)
+  train_dataset = os.path.join(args.dataset, 'train')
+  partition_dataset = os.path.join(args.dataset, 'partition')
+  os.mkdir(train_dataset)
+  os.mkdir(partition_dataset)
+
+  # original dataset path
+  adj_file = os.path.join(args.dataset, 'adj.npz')
+  feat_file = os.path.join(args.dataset, 'feat.npy')
+  mask_file = os.path.join(args.dataset, 'train_mask.npy')
+  train_label_file = os.path.join(args.dataset, 'labels.npy')
+  # train dataset path
+  train_adj_file = os.path.join(adj_file, 'adj.npz')
+  train_feat_file = os.path.join(adj_file, 'feat.npy')
+  train_mask_file = os.path.join(adj_file, 'train_mask.npy')
+  train_label_file = os.path.join(adj_file, 'labels.npy')
+
+  # generate train graph
+  if args.train_graph:
+    if os.path.exists(train_adj_file):
+      adj = spsp.load_npz(train_adj_file)
+      train_nids = np.arange(adj.shape[0])[train_mask]
+    else:
+      adj = spsp.load_npz(adj_file)
+      feat = np.load(feat_file)
+      mask = np.load(mask_file)
+      nids = np.arange(adj_file.shape[0])[mask]
+      adj, new2old = refine.build_train_graph(adj, nids, args.num_hop)
+      train_feat = feat[new2old]
+      train_label = labels[new2old]
+      train_mask = mask[new2old]
+      train_nids = np.arange(adj.shape[0])[train_mask]
+      # save
+      spsp.save_npz(train_adj_file, adj)
+      np.save(train_feat_file, train_feat)
+      np.save(train_label_file, train_label)
+      np.save(train_mask_file, train_mask)
+  else:
+    adj = spsp.load(adj_file)
+    train_mask = np.load(mask_file)
+    train_nids = np.arange(adj_file.shape[0])[train_mask]
+
+  # generate partitions
+  ps, id_maps = kl_2partition(adj)
+  for idx, (sub_adj, sub2fullid) in enumerate(zip(ps, id_maps)):
+    if args.wrap_neighbor:
+      sub_adj, sub2fullid = refine.wrap_neighbor(
+        adj, sub_adj, sub2fullid, args.num_hop, train_nids=train_nids)
+    # save to file
+    pfile = '{}subadj_{}_{}hop.npz'.format(
+      'wrap_' if args.wrap_neighbor else '',
+      str(idx), args.num_hop
+    )
+    mapfile = '{}sub2fullid_{}_{}hop.npy'.format(
+      'wrap_' if args.wrap_neighbor else '',
+      str(idx), args.num_hop
+    )
+    pfile = os.path.join(partition_dataset, pfile)
+    mapfile = os.path.join(partition_dataset, mapfile)
+    spsp.save_npz(pfile, sub_adj)
+    np.save(mapfile, sub2fullid)
+  
