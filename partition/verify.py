@@ -22,7 +22,7 @@ if __name__ == '__main__':
   # partition graph file
   pfile = ['wrap_subadj_{}_1hop.npz'.format(str(idx)) for idx in range(2)]
   pfile = [os.path.join(partition_dataset, p) for p in pfile]
-  mapfile = ['wrap_sub2fullid_{}_1hop.npy'.format(str(idx)) for idx in range(2)]
+  mapfile = ['wrap_sub2trainid_{}_1hop.npy'.format(str(idx)) for idx in range(2)]
   mapfile = [os.path.join(partition_dataset, mp) for mp in mapfile]
 
   full_adj = spsp.load_npz(full_adj_file)

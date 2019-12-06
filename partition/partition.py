@@ -153,21 +153,21 @@ if __name__ == '__main__':
 
   # generate partitions
   ps, id_maps = kl_2partition(adj)
-  for idx, (sub_adj, sub2fullid) in enumerate(zip(ps, id_maps)):
+  for idx, (sub_adj, sub2trainid) in enumerate(zip(ps, id_maps)):
     if args.wrap_neighbor:
-      sub_adj, sub2fullid = refine.wrap_neighbor(
-        adj, sub_adj, sub2fullid, args.num_hop, train_nids=train_nids)
+      sub_adj, sub2trainid = refine.wrap_neighbor(
+        adj, sub_adj, sub2trainid, args.num_hop, train_nids=train_nids)
     # save to file
     pfile = '{}subadj_{}_{}hop.npz'.format(
       'wrap_' if args.wrap_neighbor else '',
       str(idx), args.num_hop
     )
-    mapfile = '{}sub2fullid_{}_{}hop.npy'.format(
+    mapfile = '{}sub2trainid_{}_{}hop.npy'.format(
       'wrap_' if args.wrap_neighbor else '',
       str(idx), args.num_hop
     )
     pfile = os.path.join(partition_dataset, pfile)
     mapfile = os.path.join(partition_dataset, mapfile)
     spsp.save_npz(pfile, sub_adj)
-    np.save(mapfile, sub2fullid)
+    np.save(mapfile, sub2trainid)
   
