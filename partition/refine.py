@@ -11,11 +11,11 @@ def build_train_graph(coo_adj, train_nids, num_hop):
   Build training graphs
   Params:
     coo_adj: coo sparse adjacancy matrix for sub graph
-    sub2fullid: np array mapping sub_adj node idx to full graph node idx
     train_nids: np array for training node idx.
+    num_hop: num-hop neighbors for each train node
   Returns:
     coo_adj: coo sparse adjacancy matrix for new graph
-    sub2fullid: new mappings for new sub graph idx to full graph node idx
+    train2fullid: new mappings for new training graph idx to full graph node idx
   """
   # step 1: get in-neighbors for each train nids
   neighbors = get_num_hop_in_neighbors(coo_adj, train_nids, num_hop)
@@ -39,14 +39,14 @@ def build_train_graph(coo_adj, train_nids, num_hop):
   train_src = np.concatenate(tuple(train_src))
   train_dst = np.concatenate(tuple(train_dst))
   # step 3: translate src, dst node ids to new namespace
-  sub2fullid = np.unique(np.concatenate((train_src, train_dst)))
-  train_sub_src = full2sub_nid(sub2fullid, train_src)
-  train_sub_dst = full2sub_nid(sub2fullid, train_dst)
+  train2fullid = np.unique(np.concatenate((train_src, train_dst)))
+  train_sub_src = full2sub_nid(train2fullid, train_src)
+  train_sub_dst = full2sub_nid(train2fullid, train_dst)
   # step 4: build graph
   edge = np.ones(len(train_src), dtype=np.int)
   new_coo_adj = spsp.coo_matrix((edge, (train_sub_src, train_sub_dst)),
-                                shape=(len(train_src, len(train_src))))
-  return new_coo_adj, sub2fullid
+                                shape=(len(train2fullid, len(train2fullid))))
+  return new_coo_adj, train2fullid
   
 
 def wrap_neighbor(full_adj, sub_adj, sub2fullid, num_hop, train_nids=None):
@@ -67,7 +67,7 @@ def wrap_neighbor(full_adj, sub_adj, sub2fullid, num_hop, train_nids=None):
   sub_train_nids_infull_mask = isin_mask_vfunc(nid=sub2fullid, node_range=train_nids)
   sub_train_nids_infull = sub2fullid[sub_train_nids_infull_mask]
   nodes = sub_train_nids_infull
-  neighbors = get_num_hop_in_nodes(full_adj, nodes, num_hop,
+  neighbors = get_num_hop_in_neighbors(full_adj, nodes, num_hop,
                                    excluded_nodes=sub2fullid)
   neighbors = [nodes] + neighbors
   extra_src = []
@@ -94,12 +94,7 @@ def wrap_neighbor(full_adj, sub_adj, sub2fullid, num_hop, train_nids=None):
   # step 3: construct new sub graph
   edge = np.ones(len(new_src), dtype=np.int)
   new_coo_adj = spsp.coo_matrix((edge, (new_sub_src, new_sub_dst)),
-                                shape=(len(new_src, len(new_src))))
-  return new_coo_adj, full2subid
-  
+                                shape=(len(sub2fullid), len(sub2fullid)))
+  return new_coo_adj, sub2fullid
 
-def exclude(nid, node_range):
-  return not nid in node_range
 
-def include(nid, node_range):
-  return nid in node_range

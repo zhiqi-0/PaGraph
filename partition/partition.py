@@ -6,6 +6,7 @@ import networkx as nx
 from networkx.algorithms.community import kernighan_lin
 
 import .refine
+from .utils import *
 
 def kl_2partition(coo_adj, outfolder=None):
   """
@@ -16,10 +17,7 @@ def kl_2partition(coo_adj, outfolder=None):
     sub coo adj list,
     sub node idx to upper graph idx conversion array list
   """
-  # functions for selecting idx
-  def select_partition(orig, partition):
-    return orig in partition
-  vfunc = np.vectorize(select_partition, excluded=['partition'])
+  isin_mask_vfunc = np.vectorize(include, excluded=['node_range'])
 
   g = nx.from_scipy_sparse_matrix(coo_adj)
   src_node = coo_adj.row
@@ -31,8 +29,8 @@ def kl_2partition(coo_adj, outfolder=None):
   for p in partitions:
     p = np.array(list(p), dtype=np.int64)
     # select the idx in common to build sub graph
-    src_edge = vfunc(orig=src_node, partition=p)
-    dst_edge = vfunc(orig=dst_node, partition=p)
+    src_edge = isin_mask_vfunc(nid=src_node, node_range=p)
+    dst_edge = isin_mask_vfunc(nid=dst_node, node_range=p)
     p_idx = src_edge * dst_edge 
     # get pair with idx in full graph
     p_src, p_dst = src_node[p_idx], dst_node[p_idx]
