@@ -139,7 +139,7 @@ if __name__ == '__main__':
       train_feat = feat[train2fullid]
       train_label = label[train2fullid]
       train_mask = mask[train2fullid]
-      train_nids = np.arange(adj.shape[0])[train_mask.astype(np.bool)]
+      train_nids = np.arange(adj.shape[0])[train_mask]
       # save
       spsp.save_npz(train_adj_file, adj)
       np.save(train_feat_file, train_feat)
@@ -152,12 +152,20 @@ if __name__ == '__main__':
     train_nids = np.arange(adj_file.shape[0])[train_mask]
 
   # generate partitions
+  isin_mask_vfunc = np.vectorize(include, excluded=['node_range'])
   ps, id_maps = kl_2partition(adj)
   for idx, (sub_adj, sub2trainid) in enumerate(zip(ps, id_maps)):
+    # record train nid under full graph namespace before wrapping
+    sub_train_nids_infull = sub2trainid[
+      isin_mask_vfunc(nid=sub2trainid, node_range=train_nids)]
+    # wrap num-hop neighbors
     if args.wrap_neighbor:
       sub_adj, sub2trainid = refine.wrap_neighbor(
         adj, sub_adj, sub2trainid, args.num_hop, train_nids=train_nids)
+    # convert train nid into sub graph namespace
+    sub_train_nids = full2sub_nid(sub2trainid, sub_train_nids_infull)
     # save to file
+    train_nid_file = 'train_{}_{}hop.npy'.format(str(idx), args.num_hop)
     pfile = '{}subadj_{}_{}hop.npz'.format(
       'wrap_' if args.wrap_neighbor else '',
       str(idx), args.num_hop
@@ -166,8 +174,11 @@ if __name__ == '__main__':
       'wrap_' if args.wrap_neighbor else '',
       str(idx), args.num_hop
     )
+    train_nid_file = os.path.join(partition_dataset, train_nid_file)
     pfile = os.path.join(partition_dataset, pfile)
     mapfile = os.path.join(partition_dataset, mapfile)
+
+    np.save(train_nid_file, sub_train_nids)
     spsp.save_npz(pfile, sub_adj)
     np.save(mapfile, sub2trainid)
   
