@@ -31,6 +31,13 @@ Graph Neural Network Framework on Large Scaled Graph Dataset with Multi-GPUs tra
 
     This may take a while to generate all of these.
 
+* Generating partitions:
+
+  ```bash
+  $ python partition/partition.py --dataset xxx/datasetfolder --train-graph --wrap-neighbor --num-hop 1
+
+  ```
+
 ## Run
 
 ### Launch Graph Server

@@ -3,7 +3,7 @@ import numpy as np
 import scipy.sparse as spsp
 import networkx as nx
 
-from .utils import *
+from utils import *
 
 
 def build_train_graph(coo_adj, train_nids, num_hop):
@@ -45,7 +45,7 @@ def build_train_graph(coo_adj, train_nids, num_hop):
   # step 4: build graph
   edge = np.ones(len(train_src), dtype=np.int)
   new_coo_adj = spsp.coo_matrix((edge, (train_sub_src, train_sub_dst)),
-                                shape=(len(train2fullid, len(train2fullid))))
+                                shape=(len(train2fullid), len(train2fullid)))
   return new_coo_adj, train2fullid
   
 

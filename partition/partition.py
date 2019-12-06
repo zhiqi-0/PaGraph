@@ -5,8 +5,8 @@ import scipy.sparse as spsp
 import networkx as nx
 from networkx.algorithms.community import kernighan_lin
 
-import .refine
-from .utils import *
+import refine
+from utils import *
 
 def kl_2partition(coo_adj, outfolder=None):
   """
@@ -80,7 +80,7 @@ def test(draw=False):
 if __name__ == '__main__':
   parser = argparse.ArgumentParser(description='Partition')
 
-  parser.add_argument("--dataset", type=str, defualt=None,
+  parser.add_argument("--dataset", type=str, default=None,
                       help="dataset dir")
   
   parser.add_argument("--train-graph", dest='train_graph', action='store_true')
@@ -102,40 +102,50 @@ if __name__ == '__main__':
     sys.exit(-1)
   train_dataset = os.path.join(args.dataset, 'train')
   partition_dataset = os.path.join(args.dataset, 'partition')
-  os.mkdir(train_dataset)
-  os.mkdir(partition_dataset)
+  try:
+    os.mkdir(train_dataset)
+  except FileExistsError:
+    pass
+  try:
+    os.mkdir(partition_dataset)
+  except FileExistsError:
+    pass
 
   # original dataset path
   adj_file = os.path.join(args.dataset, 'adj.npz')
   feat_file = os.path.join(args.dataset, 'feat.npy')
-  mask_file = os.path.join(args.dataset, 'train_mask.npy')
-  train_label_file = os.path.join(args.dataset, 'labels.npy')
+  mask_file = os.path.join(args.dataset, 'train.npy')
+  label_file = os.path.join(args.dataset, 'labels.npy')
   # train dataset path
-  train_adj_file = os.path.join(adj_file, 'adj.npz')
-  train_feat_file = os.path.join(adj_file, 'feat.npy')
-  train_mask_file = os.path.join(adj_file, 'train_mask.npy')
-  train_label_file = os.path.join(adj_file, 'labels.npy')
+  train_adj_file = os.path.join(train_dataset, 'adj.npz')
+  train_feat_file = os.path.join(train_dataset, 'feat.npy')
+  train_mask_file = os.path.join(train_dataset, 'train.npy')
+  train_label_file = os.path.join(train_dataset, 'labels.npy')
+  train2fullid_file = os.path.join(train_dataset, 'train2fullid.npy')
 
   # generate train graph
   if args.train_graph:
     if os.path.exists(train_adj_file):
       adj = spsp.load_npz(train_adj_file)
-      train_nids = np.arange(adj.shape[0])[train_mask]
+      mask = np.load(mask_file).astype(np.bool)
+      train_nids = np.arange(adj.shape[0])[mask]
     else:
       adj = spsp.load_npz(adj_file)
       feat = np.load(feat_file)
-      mask = np.load(mask_file)
-      nids = np.arange(adj_file.shape[0])[mask]
-      adj, new2old = refine.build_train_graph(adj, nids, args.num_hop)
-      train_feat = feat[new2old]
-      train_label = labels[new2old]
-      train_mask = mask[new2old]
-      train_nids = np.arange(adj.shape[0])[train_mask]
+      mask = np.load(mask_file).astype(np.bool)
+      label = np.load(label_file)
+      nids = np.arange(adj.shape[0])[mask]
+      adj, train2fullid = refine.build_train_graph(adj, nids, args.num_hop)
+      train_feat = feat[train2fullid]
+      train_label = label[train2fullid]
+      train_mask = mask[train2fullid]
+      train_nids = np.arange(adj.shape[0])[train_mask.astype(np.bool)]
       # save
       spsp.save_npz(train_adj_file, adj)
       np.save(train_feat_file, train_feat)
       np.save(train_label_file, train_label)
       np.save(train_mask_file, train_mask)
+      np.save(train2fullid_file, train2fullid)
   else:
     adj = spsp.load(adj_file)
     train_mask = np.load(mask_file)

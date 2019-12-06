@@ -67,9 +67,12 @@ def include(nid, node_range):
   return nid in node_range
 
 
-def draw_graph(sub_adj, sub2fullid=None):
+def draw_graph(sub_adj, sub2fullid=None, pos=None):
   g = nx.from_scipy_sparse_matrix(sub_adj, create_using=nx.DiGraph())
-  pos = nx.kamada_kawai_layout(g)
+  if pos is None:
+    pos = nx.kamada_kawai_layout(g)
+  else:
+    pos = pos(g)
   #pos = nx.spring_layout(g)
   if sub2fullid is None:
     nx.draw(g, pos, with_labels=True, arrows=True, node_color=[[.7, .7, .7]])
