@@ -67,16 +67,21 @@ def include(nid, node_range):
   return nid in node_range
 
 
-def draw_graph(sub_adj, sub2fullid=None, pos=None):
+def draw_graph(sub_adj, sub2fullid=None, pos=None, colored_nodes=None):
   g = nx.from_scipy_sparse_matrix(sub_adj, create_using=nx.DiGraph())
   if pos is None:
     pos = nx.kamada_kawai_layout(g)
   else:
     pos = pos(g)
+  color_map = ['gray']
+  if colored_nodes is not None:
+    color_map = ['gray'] * sub_adj.shape[0]
+    for nid in colored_nodes:
+      color_map[nid] = 'orange'
   #pos = nx.spring_layout(g)
   if sub2fullid is None:
-    nx.draw(g, pos, with_labels=True, arrows=True, node_color=[[.7, .7, .7]])
+    nx.draw(g, pos, with_labels=True, arrows=True, node_color=color_map)
   else:
     labels = {idx: sub2fullid[idx] for idx in range(len(sub2fullid))}
-    nx.draw(g, pos, arrows=True, node_color=[[.7, .7, .7]])
+    nx.draw(g, pos, arrows=True, node_color=color_map)
     _ = nx.draw_networkx_labels(g, pos, labels=labels)

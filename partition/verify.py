@@ -31,18 +31,21 @@ if __name__ == '__main__':
   full_adj = spsp.load_npz(full_adj_file)
   train_nid_full = np.arange(full_adj.shape[0])[np.load(full_train_mask).astype(np.bool)]
   print('train nids:', train_nid_full)
-  draw_graph(full_adj)
+  draw_graph(full_adj, colored_nodes=train_nid_full)
   # train graph visualization
   train_adj = spsp.load_npz(train_adj_file)
   train2fullid = np.load(train2fullid_file)
-  draw_graph(train_adj, train2fullid)
+  draw_graph(train_adj, train2fullid, 
+             colored_nodes=full2sub_nid(train2fullid, train_nid_full))
   # sub graph visualization
   sub_adjs = [spsp.load_npz(subadj_file) for subadj_file in pfile]
   sub2trainids = [train2fullid[np.load(submap_file)] for submap_file in mapfile]
-  trainids = [np.load(tf) for tf for trainfile]
+  trainids = [np.load(tf) for tf in trainfile]
 
   print(train2fullid[sub2trainids[0][trainids[0]]])
-  draw_graph(sub_adjs[0], train2fullid[sub2trainids[0]], pos=nx.spring_layout)
+  draw_graph(sub_adjs[0], train2fullid[sub2trainids[0]], pos=nx.spring_layout,
+             colored_nodes=trainids[0])
   print(train2fullid[sub2trainids[1][trainids[1]]])
-  draw_graph(sub_adjs[1], train2fullid[sub2trainids[1]], pos=nx.spring_layout)
+  draw_graph(sub_adjs[1], train2fullid[sub2trainids[1]], pos=nx.spring_layout,
+             colored_nodes=trainids[1])
 
