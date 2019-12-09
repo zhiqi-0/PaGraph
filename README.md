@@ -19,22 +19,22 @@ Graph Neural Network Framework on Large Scaled Graph Dataset with Multi-GPUs tra
   * Use [PaRMAT](https://github.com/farkhor/PaRMAT) to generate a graph:
 
     ```bash
-    $ ./PaRMAT -nVertices 10 -nEdges 50 -output /path/to/datafolder/pp.txt -noDuplicateEdges -undirected -threads 16
+    $ ./PaRMAT -noDuplicateEdges -undirected -noEdgeToSelf -threads 16 -nVertices 10 -nEdges 25 -output /path/to/datafolder/pp.txt
 
     ```
   
   * Generate random features, labels, train/val/test datasets:
 
     ```bash
-    $ python data/preprocess.py --dataset xxx/datasetfolder --ppfile pp.txt --gen-feature --gen-label --gen-set
+    $ python data/preprocess.py --ppfile pp.txt --gen-feature --gen-label --gen-set --dataset xxx/datasetfolder
     ```
 
     This may take a while to generate all of these.
 
-* Generating partitions:
+* Generating partitions (naive partition):
 
   ```bash
-  $ python partition/partition.py --dataset xxx/datasetfolder --train-graph --wrap-neighbor --num-hop 1
+  $ python partition/partition.py --num-hop 1 --dataset xxx/datasetfolder
 
   ```
 

@@ -16,6 +16,9 @@ def build_train_graph(coo_adj, train_nids, num_hop):
   Returns:
     coo_adj: coo sparse adjacancy matrix for new graph
     train2fullid: new mappings for new training graph idx to full graph node idx
+    valid_train_nids: valid train nids under full graph space. 
+                      Note some train id may not be valid (i.e. no in-neighbors).
+                      These nodes will still be included to sub graph.
   """
   # step 1: get in-neighbors for each train nids
   neighbors = get_num_hop_in_neighbors(coo_adj, train_nids, num_hop)
@@ -34,6 +37,8 @@ def build_train_graph(coo_adj, train_nids, num_hop):
     mask = src_mask * dst_mask
     hop_src = src[mask]
     hop_dst = dst[mask]
+    if hop == 0:
+      valid_train_nids = hop_dst
     train_src.append(hop_src)
     train_dst.append(hop_dst)
   train_src = np.concatenate(tuple(train_src))
@@ -46,7 +51,7 @@ def build_train_graph(coo_adj, train_nids, num_hop):
   edge = np.ones(len(train_src), dtype=np.int)
   new_coo_adj = spsp.coo_matrix((edge, (train_sub_src, train_sub_dst)),
                                 shape=(len(train2fullid), len(train2fullid)))
-  return new_coo_adj, train2fullid
+  return new_coo_adj, train2fullid, valid_train_nids
   
 
 def wrap_neighbor(full_adj, sub_adj, sub2fullid, num_hop, train_nids=None):

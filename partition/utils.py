@@ -55,6 +55,7 @@ def get_sub_train_nids(sub2fullid, train_nids):
 def full2sub_nid(sub2fullid, full_nids):
   """
   Return an nd array with length of max(su2fullid) + 1.
+  Convert full nids to sub nids
   """
   full2subid = np.zeros(np.max(sub2fullid) + 1, dtype=np.int64)
   full2subid[sub2fullid] = np.arange(len(sub2fullid))
