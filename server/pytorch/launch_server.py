@@ -13,6 +13,7 @@ import numpy as np
 import torch
 import dgl
 from dgl import DGLGraph
+import dgl.function as fn
 
 import PaGraph.data as data
 
@@ -42,6 +43,15 @@ def main(args):
   # calculate norm for gcn
   dgl_g = DGLGraph(graph, readonly=True)
   norm = 1. / dgl_g.in_degrees().float().unsqueeze(1)
+
+  # preprocess 
+  if args.preprocess:
+    dgl_g.ndata['norm'] = norm
+    dgl_g.ndata['features'] = features
+    dgl_g.update_all(fn.copy_src(src='features', out='m'),
+                     fn.sum(msg='m', out='preprocess'),
+                     lambda node : {'preprocess': node.data['preprocess'] * node.data['norm']})
+    features = dgl_g.ndata['preprocess']
   del dgl_g
 
   # setup features and norms
@@ -60,6 +70,9 @@ if __name__ == '__main__':
   
   parser.add_argument("--num-workers", type=int, default=1,
                       help="the number of workers")
+  
+  parser.add_argument("--preprocess", dest='preprocess', action='store_true')
+  parser.set_defaults(preprocess=False)
   
   args = parser.parse_args()
   main(args)
