@@ -52,7 +52,6 @@ class GraphCacheServer:
     Params:
       data: dict: {'field name': tensor data}
     """
-    # Consider a `reserve` API for in-place update
     with torch.cuda.device(self.gpuid):
       for name in data:
         data_num = data[name].size(0)
@@ -100,3 +99,4 @@ class GraphCacheServer:
       with torch.cuda.device(self.gpuid):
         for key in self.gpu_fix_cache:
           frame[name][sub_nid_in_cpu] = cpu_data[name].cuda()
+      nodeflow._node_frames[i] = FrameRef(frame)
