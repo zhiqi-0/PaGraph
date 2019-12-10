@@ -23,7 +23,7 @@ def build_train_graph(coo_adj, train_nids, num_hop):
   # step 1: get in-neighbors for each train nids
   neighbors = get_num_hop_in_neighbors(coo_adj, train_nids, num_hop)
   # step 2: get edge (src, dst) pair
-  isin_mask_vfunc = np.vectorize(include, excluded=['node_range'])
+  #isin_mask_vfunc = np.vectorize(include, excluded=['node_range'])
   src = coo_adj.row
   dst = coo_adj.col
   neighbors = [train_nids] + neighbors
@@ -32,8 +32,10 @@ def build_train_graph(coo_adj, train_nids, num_hop):
   for hop in range(num_hop):
     hop_dst = neighbors[hop]
     hop_src = neighbors[hop+1]
-    src_mask = isin_mask_vfunc(nid=src, node_range=hop_src)
-    dst_mask = isin_mask_vfunc(nid=dst, node_range=hop_dst)
+    #src_mask = isin_mask_vfunc(nid=src, node_range=hop_src)
+    #dst_mask = isin_mask_vfunc(nid=dst, node_range=hop_dst)
+    src_mask = pinclude(src, hop_src)
+    dst_mask = pinclude(dst, hop_dst)
     mask = src_mask * dst_mask
     hop_src = src[mask]
     hop_dst = dst[mask]

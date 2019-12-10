@@ -1,11 +1,27 @@
 import numpy as np
 import scipy.sparse as spsp
 import networkx as nx
+from numba import njit, prange
 
 def get_node_in_neighbor(nid, csc_adj):
   """
   """
   return csc_adj.indices[csc_adj.indptr[nid]: csc_adj.indptr[nid+1]]
+
+@njit(parallel=True)
+def _pget_neighbors(nids, indptr, indices):
+  num = nids.shape[0]
+  neighbors = []
+  for i in prange(num):
+    nei = indices[indptr[nids[i]]:indptr[nids[i] + 1]]
+    neighbors.append(nei)
+  return neighbors
+
+def pget_in_neighbors(coo_adj, node_ids):
+  csc_adj = coo_adj.tocsc()
+  neighbors = _pget_neighbors(node_ids, csc_adj.indptr, csc_adj.indices)
+  neighbors = np.unique(np.concatenate(tuple(neighbors)))
+  return neighbors
 
 
 def get_in_neighbors(coo_adj, node_ids):
@@ -29,7 +45,8 @@ def get_num_hop_in_neighbors(coo_adj, node_ids, num_hop, excluded_nodes=None):
 
   neighbors = []
   for _ in range(num_hop):
-    neighbors.append(get_in_neighbors(coo_adj, node_ids))
+    node_ids = get_in_neighbors(coo_adj, node_ids)
+    neighbors.append(node_ids)
     if excluded_nodes is not None:
       mask = select_mask(nid=neighbors[-1], node_range=excluded_nodes)
       neighbors[-1] = neighbors[-1][mask]
@@ -64,8 +81,44 @@ def full2sub_nid(sub2fullid, full_nids):
 def exclude(nid, node_range):
   return not nid in node_range
 
+
+@njit(parallel=True)
+def _pexclude(nids, node_range):
+  num = nids.shape[0]
+  node_range_num = node_range.shape[0]
+  ret = np.empty_like(nids)
+  for i in prange(num):
+    ret[i] = 1
+    for j in range(node_range_num):
+      if nids[i] == node_range[j]:
+        ret[i] = 0
+        break
+  return ret
+
+def pexclude(nids, node_range):
+  return _pexclude(nids, node_range).astype(np.bool)
+
+
 def include(nid, node_range):
   return nid in node_range
+
+
+@njit(parallel=True)
+def _pinclude(nids, node_range):
+  num = nids.shape[0]
+  node_range_num = node_range.shape[0]
+  ret = np.empty_like(nids)
+  for i in prange(num):
+    ret[i] = 0
+    for j in range(node_range_num):
+      if nids[i] == node_range[j]:
+        ret[i] = 1
+        break
+  return ret
+
+def pinclude(nids, node_range):
+  return _pinclude(nids, node_range).astype(np.bool)
+
 
 
 def draw_graph(sub_adj, sub2fullid=None, pos=None, colored_nodes=None):

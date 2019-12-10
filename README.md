@@ -10,7 +10,7 @@ Graph Neural Network Framework on Large Scaled Graph Dataset with Multi-GPUs tra
 
 * DGL v = 0.4
 
-* numa (pip install numa)
+* numba (conda install numba)
 
 ## Prepare Dataset
 
