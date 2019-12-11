@@ -31,8 +31,12 @@ class GCNSampling(nn.Module):
                n_classes,
                n_layers,
                activation,
-               dropout):
+               dropout,
+               preprocess=False):
     super(GCNSampling, self).__init__()
+
+    self.preprocess = preprocess
+    
     self.n_layers = n_layers
     if dropout != 0:
       self.dropout = nn.Dropout(p=dropout)
@@ -40,8 +44,12 @@ class GCNSampling(nn.Module):
       self.dropout = None
     self.layers = nn.ModuleList()
     # input layer
-    skip_start = (0 == n_layers-1)
-    self.layers.append(NodeUpdate(in_feats, n_hidden, activation, concat=skip_start))
+    if self.preprocess:
+      self.linear = nn.Linear(in_feats, n_hidden)
+      self.activation = activation
+    else:
+      skip_start = (0 == n_layers-1)
+      self.layers.append(NodeUpdate(in_feats, n_hidden, activation, concat=skip_start))
     # hidden layers
     for i in range(1, n_layers):
       skip_start = (i == n_layers-1)
@@ -50,6 +58,9 @@ class GCNSampling(nn.Module):
     self.layers.append(NodeUpdate(2*n_hidden, n_classes))
 
   def forward(self, nf):
+    if self.preprocess:
+      return self.preprocess_forward(nf)
+    
     nf.layers[0].data['activation'] = nf.layers[0].data['features']
 
     for i, layer in enumerate(self.layers):
@@ -63,6 +74,29 @@ class GCNSampling(nn.Module):
                        layer)
 
     h = nf.layers[-1].data.pop('activation')
+    return h
+
+
+  def preprocess_forward(self, nf):
+    h = nf.layers[0].data['features']
+    if self.dropout:
+      h = self.dropout(h)
+    h = self.linear(h)
+
+    skip_start = (0 == self.n_layers - 1)
+    if skip_start:
+      h = torch.cat((h, self.activation(h)), dim=1)
+    else:
+      h = self.activation(h)
+    
+    for i, layer in enumerate(self.layers):
+      nf.layers[i].data['h'] = h
+      nf.block_compute(i,
+                       fn.copy_src(src='h', out='m'),
+                       fn.mean(msg='m', out='h'),
+                       layer)
+      h = nf.layers[i+1].data.pop('activation')
+
     return h
 
 

@@ -16,6 +16,7 @@ import torch.multiprocessing as mp
 import torch.nn.functional as F
 import numpy as np
 import dgl
+from dgl import DGLGraph
 
 from PaGraph.model.pytorch.gcn_nssc import GCNSampling, GCNInfer
 import PaGraph.data as data
@@ -28,32 +29,40 @@ def init_process(rank, world_size, backend):
   torch.manual_seed(rank)
   print('rank [{}] process successfully launches'.format(rank))
 
+
 def trainer(rank, world_size, args, backend='nccl'):
   # init multi process
   init_process(rank, world_size, backend)
   
   # load data
   dataname = os.path.basename(args.dataset)
-  g = dgl.contrib.graph_store.create_graph_from_store(dataname, "shared_mem")
-  labels = data.get_labels(args.dataset)
-  n_classes = len(np.unique(labels))
-  # masks for semi-supervised learning
-  train_mask, val_mask, test_mask = data.get_masks(args.dataset)
-  train_nid = np.nonzero(train_mask)[0].astype(np.int64)
-  test_nid = np.nonzero(test_mask)[0].astype(np.int64)
+  remote_g = dgl.contrib.graph_store.create_graph_from_store(dataname, "shared_mem")
+
+  adj, t2fid = data.get_sub_train_graph(args.dataset, rank)
+  g = DGLGraph(adj, readonly=True)
+  labels = data.get_sub_train_labels(args.dataset, rank)
+  n_classes = args.n_classes
+  train_nid = data.get_sub_train_nid(args.dataset, rank)
+  
   # to torch tensor
+  t2fid = torch.LongTensor(t2fid)
   labels = torch.LongTensor(labels)
-  train_mask = torch.ByteTensor(train_mask)
-  val_mask = torch.ByteTensor(val_mask)
-  test_mask = torch.ByteTensor(test_mask)
+  print('Caching data from remote server...')
+  features = data.get_feat_from_server(remote_g, t2fid, "features").cuda(rank)
+  norm = data.get_feat_from_server(remote_g, t2fid, "norm").cuda(rank)
+  g.ndata['features'] = features
+  g.ndata['norm'] = norm
+  print('Done. Start Training...')
 
   # prepare model
+  num_hops = args.n_layers if args.preprocess else args.n_layers
   model = GCNSampling(args.feat_size,
                       args.n_hidden,
                       n_classes,
                       args.n_layers,
                       F.relu,
-                      args.dropout)
+                      args.dropout,
+                      args.preprocess)
   infer_model = GCNInfer(args.feat_size,
                          args.n_hidden,
                          n_classes,
@@ -79,12 +88,12 @@ def trainer(rank, world_size, args, backend='nccl'):
                                                   args.num_neighbors,
                                                   neighbor_type='in',
                                                   shuffle=True,
-                                                  num_workers=16,
-                                                  num_hops=args.n_layers+1,
+                                                  num_workers=8,
+                                                  num_hops=num_hops,
                                                   seed_nodes=train_nid,
                                                   prefetch=True):
       batch_start_time = time.time()
-      nf.copy_from_parent(ctx=ctx)
+      nf.copy_from_parent()
       batch_nids = nf.layer_parent_nid(-1)
       label = labels[batch_nids]
       label = label.cuda(rank, non_blocking=True)
@@ -121,12 +130,15 @@ if __name__ == '__main__':
   # model arch
   parser.add_argument("--feat-size", type=int, default=300,
                       help='input feature size')
+  parser.add_argument("--n-classes", type=int, default=60)
   parser.add_argument("--dropout", type=float, default=0.2,
                       help="dropout probability")
   parser.add_argument("--n-hidden", type=int, default=32,
                       help="number of hidden gcn units")
   parser.add_argument("--n-layers", type=int, default=1,
                       help="number of hidden gcn layers")
+  parser.add_argument("--preprocess", dest='preprocess', action='store_true')
+  parser.set_defaults(preprocess=False)
   # training hyper-params
   parser.add_argument("--lr", type=float, default=3e-2,
                       help="learning rate")
