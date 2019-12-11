@@ -40,7 +40,7 @@ def build_train_graph(coo_adj, train_nids, num_hop):
     hop_src = src[mask]
     hop_dst = dst[mask]
     if hop == 0:
-      valid_train_nids = hop_dst
+      valid_train_nids = np.unique(hop_dst)
     train_src.append(hop_src)
     train_dst.append(hop_dst)
   train_src = np.concatenate(tuple(train_src))
