@@ -95,7 +95,7 @@ class GraphCacheServer:
         frame[name][sub_nid_in_gpu] = self.gpu_fix_cache[key][cacheid]
       # for cpu cached tensors: ##NOTE: Make sure it is in-place update!
       cpu_nid_infull = self.nid_map[sub_nid_in_cpu]
-      cpu_data = self.graph._node_frames[cpu_nid_infull]
+      cpu_data = self.graph._node_frame[dgl.utils.toindex(cpu_nid_infull)]
       with torch.cuda.device(self.gpuid):
         for key in self.gpu_fix_cache:
           frame[name][sub_nid_in_cpu] = cpu_data[name].cuda()

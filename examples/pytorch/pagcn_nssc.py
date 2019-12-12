@@ -40,9 +40,12 @@ def trainer(rank, world_size, args, backend='nccl'):
 
   adj, t2fid = data.get_sub_train_graph(args.dataset, rank)
   g = DGLGraph(adj, readonly=True)
-  labels = data.get_sub_train_labels(args.dataset, rank)
   n_classes = args.n_classes
   train_nid = data.get_sub_train_nid(args.dataset, rank)
+  sub_labels = data.get_sub_train_labels(args.dataset, rank)
+  labels = np.zeros(np.max(train_nid) + 1, dtype=np.int)
+  labels[train_nid] = sub_labels
+
   
   # to torch tensor
   t2fid = torch.LongTensor(t2fid)

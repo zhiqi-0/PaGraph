@@ -46,6 +46,7 @@ def main(args):
 
   # preprocess 
   if args.preprocess:
+    print('Preprocessing features...')
     dgl_g.ndata['norm'] = norm
     dgl_g.ndata['features'] = features
     dgl_g.update_all(fn.copy_src(src='features', out='m'),

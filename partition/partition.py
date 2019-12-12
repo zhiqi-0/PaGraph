@@ -88,6 +88,7 @@ def naive_partition(coo_adj, num, train_nids, num_hop=1):
     sub_mask = np.zeros(sub_adj.shape[0], dtype=np.int)
     top_num = int(coo_adj.shape[0] / num)
     if save_train_nid:
+      # ALREADY CONVERTED????
       nids = full2sub_nid(sub_train2full, sub_train_nids[subid])
       sub_mask[nids] = 1
       top_num -= len(nids)

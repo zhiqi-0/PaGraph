@@ -48,12 +48,14 @@ def trainer(rank, world_size, args, backend='nccl'):
   test_mask = torch.ByteTensor(test_mask)
 
   # prepare model
+  num_hops = args.n_layers if args.preprocess else args.n_layers
   model = GCNSampling(args.feat_size,
                       args.n_hidden,
                       n_classes,
                       args.n_layers,
                       F.relu,
-                      args.dropout)
+                      args.dropout,
+                      args.preprocess)
   infer_model = GCNInfer(args.feat_size,
                          args.n_hidden,
                          n_classes,
@@ -80,7 +82,7 @@ def trainer(rank, world_size, args, backend='nccl'):
                                                   neighbor_type='in',
                                                   shuffle=True,
                                                   num_workers=16,
-                                                  num_hops=args.n_layers+1,
+                                                  num_hops=num_hops,
                                                   seed_nodes=train_nid,
                                                   prefetch=True):
       batch_start_time = time.time()
@@ -127,6 +129,8 @@ if __name__ == '__main__':
                       help="number of hidden gcn units")
   parser.add_argument("--n-layers", type=int, default=1,
                       help="number of hidden gcn layers")
+  parser.add_argument("--preprocess", dest='preprocess', action='store_true')
+  parser.set_defaults(preprocess=False)
   # training hyper-params
   parser.add_argument("--lr", type=float, default=3e-2,
                       help="learning rate")
