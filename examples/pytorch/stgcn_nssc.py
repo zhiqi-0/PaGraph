@@ -39,11 +39,11 @@ def trainer(rank, world_size, args, backend='nccl'):
   dataname = os.path.basename(args.dataset)
   remote_g = dgl.contrib.graph_store.create_graph_from_store(dataname, "shared_mem")
 
-  adj, t2fid = data.get_sub_train_graph(args.dataset, rank)
+  adj, t2fid = data.get_sub_train_graph(args.dataset, rank, world_size)
   g = DGLGraph(adj, readonly=True)
   n_classes = args.n_classes
-  train_nid = data.get_sub_train_nid(args.dataset, rank)
-  sub_labels = data.get_sub_train_labels(args.dataset, rank)
+  train_nid = data.get_sub_train_nid(args.dataset, rank, world_size)
+  sub_labels = data.get_sub_train_labels(args.dataset, rank, world_size)
   labels = np.zeros(np.max(train_nid) + 1, dtype=np.int)
   labels[train_nid] = sub_labels
 
