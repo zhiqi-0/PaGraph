@@ -25,7 +25,7 @@ def init_process(rank, world_size, backend):
   os.environ['MASTER_ADDR'] = '127.0.0.1'
   os.environ['MASTER_PORT'] = '29501'
   dist.init_process_group(backend, rank=rank, world_size=world_size)
-  torch.cuda.set_device(rank)
+  #torch.cuda.set_device(rank)
   torch.manual_seed(rank)
   print('rank [{}] process successfully launches'.format(rank))
 

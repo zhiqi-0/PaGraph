@@ -46,16 +46,52 @@ class GraphCacheServer:
     # gpu tensor cache
     self.full_cached = False
     self.dims = {}          # {'field name': dims of the tensor data of a node}
+    self.total_dim = 0
     self.gpu_fix_cache = dict() # {'field name': tensor data for cached nodes in gpu}
     with torch.cuda.device(self.gpuid):
       self.localid2cacheid = torch.cuda.LongTensor(node_num).fill_(0)
       self.localid2cacheid.requires_grad_(False)
-
-
-  def limit_capability(self, capability):
-    self.capability = capability
-
   
+  def init_field(self, embed_names):
+    with torch.cuda.device(self.gpuid):
+      nid = torch.cuda.LongTensor([0])
+    feats = self.get_feat_from_server(nid, embed_names)
+    self.total_dim = 0
+    for name in embed_names:
+      self.dims[name] = feats[name].size(1)
+      self.total_dim += feats[name].size(1)
+    print('total dims: {}'.format(self.total_dim))
+
+
+  def auto_cache(self, dgl_g, embed_names):
+    """
+    Automatically cache the node features
+    Params:
+      g: DGLGraph for local graphs
+      embed_names: field name list, e.g. ['features', 'norm']
+    """
+    # Step1: get available GPU memory
+    peak_allocated_mem = torch.cuda.max_memory_allocated(device=self.gpuid)
+    total_mem = torch.cuda.get_device_properties(self.gpuid).total_memory
+    available = total_mem - peak_allocated_mem - 512 * 1024 * 1024 # in bytes
+    # Stpe2: get capability
+    self.capability = int(available / (self.total_dim * 4)) # assume float32 = 4 bytes
+    # Step3: cache
+    if self.capability > self.node_num:
+      # fully cache
+      print('cache the full graph...')
+      full_nids = torch.arange(self.node_num).cuda(self.gpuid)
+      data_frame = self.get_feat_from_server(full_nids, embed_names)
+      self.cache_fix_data(full_nids, data_frame, is_full=True)
+    else:
+      # choose top-cap out-degree nodes to cache
+      print('cache the part of graph...')
+      out_degrees = dgl_g.out_degrees()
+      sort_nid = torch.argsort(out_degrees, descending=True)
+      cache_nid = sort_nid[:self.capability]
+      data_frame = self.get_feat_from_server(cache_nid, embed_names)
+      self.cache_fix_data(cache_nid, data_frame, is_full=False)
+
 
   def get_feat_from_server(self, nids, embed_names, to_gpu=False):
     """
@@ -124,10 +160,10 @@ class GraphCacheServer:
       # create frame
       with torch.cuda.device(self.gpuid):
         frame = {name: torch.cuda.FloatTensor(tnid.size(0), self.dims[name]) \
-                  for name in self.gpu_fix_cache}
+                  for name in self.dims}
       # for gpu cached tensors: ##NOTE: Make sure it is in-place update!
       if nids_in_gpu.size(0) != 0:
-        for name in self.gpu_fix_cache:
+        for name in self.dims:
           cacheid = self.localid2cacheid[nids_in_gpu]
           frame[name][gpu_mask] = self.gpu_fix_cache[name][cacheid]
       # for cpu cached tensors: ##NOTE: Make sure it is in-place update!

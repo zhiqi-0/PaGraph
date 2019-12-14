@@ -16,9 +16,11 @@ import torch.multiprocessing as mp
 import torch.nn.functional as F
 import numpy as np
 import dgl
+from dgl import DGLGraph
 
 from PaGraph.model.pytorch.gcn_nssc import GCNSampling, GCNInfer
 import PaGraph.data as data
+import PaGraph.storage as storage
 
 def init_process(rank, world_size, backend):
   os.environ['MASTER_ADDR'] = '127.0.0.1'
@@ -28,24 +30,29 @@ def init_process(rank, world_size, backend):
   torch.manual_seed(rank)
   print('rank [{}] process successfully launches'.format(rank))
 
+
 def trainer(rank, world_size, args, backend='nccl'):
   # init multi process
   init_process(rank, world_size, backend)
   
   # load data
   dataname = os.path.basename(args.dataset)
-  g = dgl.contrib.graph_store.create_graph_from_store(dataname, "shared_mem")
-  labels = data.get_labels(args.dataset)
-  n_classes = len(np.unique(labels))
-  # masks for semi-supervised learning
-  train_mask, val_mask, test_mask = data.get_masks(args.dataset)
-  train_nid = np.nonzero(train_mask)[0].astype(np.int64)
-  test_nid = np.nonzero(test_mask)[0].astype(np.int64)
+  remote_g = dgl.contrib.graph_store.create_graph_from_store(dataname, "shared_mem")
+
+  adj, t2fid = data.get_sub_train_graph(args.dataset, rank)
+  g = DGLGraph(adj, readonly=True)
+  n_classes = args.n_classes
+  train_nid = data.get_sub_train_nid(args.dataset, rank)
+  sub_labels = data.get_sub_train_labels(args.dataset, rank)
+  labels = np.zeros(np.max(train_nid) + 1, dtype=np.int)
+  labels[train_nid] = sub_labels
+
   # to torch tensor
+  t2fid = torch.LongTensor(t2fid)
   labels = torch.LongTensor(labels)
-  train_mask = torch.ByteTensor(train_mask)
-  val_mask = torch.ByteTensor(val_mask)
-  test_mask = torch.ByteTensor(test_mask)
+  embed_names = ['features', 'norm']
+  cacher = storage.GraphCacheServer(remote_g, adj.shape[0], t2fid, rank)
+  cacher.init_field(embed_names)
 
   # prepare model
   num_hops = args.n_layers if args.preprocess else args.n_layers
@@ -81,12 +88,12 @@ def trainer(rank, world_size, args, backend='nccl'):
                                                   args.num_neighbors,
                                                   neighbor_type='in',
                                                   shuffle=True,
-                                                  num_workers=16,
+                                                  num_workers=8,
                                                   num_hops=num_hops,
                                                   seed_nodes=train_nid,
                                                   prefetch=True):
       batch_start_time = time.time()
-      nf.copy_from_parent(ctx=ctx)
+      cacher.fetch_data(nf)
       batch_nids = nf.layer_parent_nid(-1)
       label = labels[batch_nids]
       label = label.cuda(rank, non_blocking=True)
@@ -99,6 +106,8 @@ def trainer(rank, world_size, args, backend='nccl'):
 
       step += 1
       batch_dur.append(time.time() - batch_start_time)
+      if epoch == 0 and step == 1:
+        cacher.auto_cache(g, embed_names)
       if rank == 0 and step % 20 == 0:
         print('epoch [{}] step [{}]. Loss: {:.4f} Batch average time(s): {:.4f}'
               .format(epoch + 1, step, loss.item(), np.mean(np.array(batch_dur))))
@@ -123,6 +132,7 @@ if __name__ == '__main__':
   # model arch
   parser.add_argument("--feat-size", type=int, default=300,
                       help='input feature size')
+  parser.add_argument("--n-classes", type=int, default=60)
   parser.add_argument("--dropout", type=float, default=0.2,
                       help="dropout probability")
   parser.add_argument("--n-hidden", type=int, default=32,
