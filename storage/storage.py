@@ -51,6 +51,12 @@ class GraphCacheServer:
     with torch.cuda.device(self.gpuid):
       self.localid2cacheid = torch.cuda.LongTensor(node_num).fill_(0)
       self.localid2cacheid.requires_grad_(False)
+    
+    # logs
+    self.log = False
+    self.try_num = 0
+    self.miss_num = 0
+
   
   def init_field(self, embed_names):
     with torch.cuda.device(self.gpuid):
@@ -77,7 +83,7 @@ class GraphCacheServer:
     # Stpe2: get capability
     self.capability = int(available / (self.total_dim * 4)) # assume float32 = 4 bytes
     # Step3: cache
-    if self.capability > self.node_num:
+    if self.capability >= self.node_num:
       # fully cache
       print('cache the full graph...')
       full_nids = torch.arange(self.node_num).cuda(self.gpuid)
@@ -173,6 +179,8 @@ class GraphCacheServer:
         for name in self.dims:
           frame[name][cpu_mask] = cpu_data_frame[name]
       nodeflow._node_frames[i] = FrameRef(Frame(frame))
+      if self.log:
+        self.log_miss_rate(nids_in_cpu.size(0), tnid.size(0))
 
 
   def fetch_from_cache(self, nodeflow):
@@ -183,3 +191,14 @@ class GraphCacheServer:
       for name in self.gpu_fix_cache:
         frame[name] = self.gpu_fix_cache[name][tnid]
       nodeflow._node_frames[i] = FrameRef(Frame(frame))
+
+  
+  def log_miss_rate(self, miss_num, total_num):
+    self.try_num += total_num
+    self.miss_num += miss_num
+  
+  def get_miss_rate(self):
+    miss_rate = float(self.miss_num) / self.try_num
+    self.miss_num = 0
+    self.try_num = 0
+    return miss_rate

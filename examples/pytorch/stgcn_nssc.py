@@ -53,6 +53,7 @@ def trainer(rank, world_size, args, backend='nccl'):
   embed_names = ['features', 'norm']
   cacher = storage.GraphCacheServer(remote_g, adj.shape[0], t2fid, rank)
   cacher.init_field(embed_names)
+  cacher.log = True
 
   # prepare model
   num_hops = args.n_layers if args.preprocess else args.n_layers
@@ -111,9 +112,14 @@ def trainer(rank, world_size, args, backend='nccl'):
       if rank == 0 and step % 20 == 0:
         print('epoch [{}] step [{}]. Loss: {:.4f} Batch average time(s): {:.4f}'
               .format(epoch + 1, step, loss.item(), np.mean(np.array(batch_dur))))
+
     if rank == 0:
       epoch_dur.append(time.time() - epoch_start_time)
       print('Epoch average time: {:.4f}'.format(np.mean(np.array(epoch_dur[2:]))))
+
+    if cacher.log:
+      miss_rate = cacher.get_miss_rate()
+      print('Epoch average miss rate: {:.4f}'.format(miss_rate))
     
     # saving after several epochs
     if (epoch + 1) % 5 == 0 and rank == 0:
