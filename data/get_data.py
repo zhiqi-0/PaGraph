@@ -23,7 +23,7 @@ def get_graph_data(dataname):
   return adj, feat
 
 
-def get_sub_train_graph(dataname, idx):
+def get_sub_train_graph(dataname, idx, partitions):
   """
   Params:
     dataname: should be a folder name.
@@ -33,7 +33,7 @@ def get_sub_train_graph(dataname, idx):
     adj
     train2fullid
   """
-  dataname = os.path.join(dataname, 'naive')
+  dataname = os.path.join(dataname, '{}naive'.format(partitions))
   adj_file = os.path.join(dataname, 'subadj_{}.npz'.format(idx))
   train2full_file = os.path.join(dataname, 'sub_train2fullid_{}.npy'.format(idx))
   adj = scipy.sparse.load_npz(adj_file)
@@ -71,8 +71,8 @@ def get_masks(dataname):
   return train_mask, val_mask, test_mask
 
 
-def get_sub_train_nid(dataname, idx):
-  dataname = os.path.join(dataname, 'naive')
+def get_sub_train_nid(dataname, idx, partitions):
+  dataname = os.path.join(dataname, '{}naive'.format(partitions))
   sub_train_file = os.path.join(dataname, 'sub_trainid_{}.npy'.format(idx))
   sub_train_nid = np.load(sub_train_file)
   return sub_train_nid
@@ -90,8 +90,8 @@ def get_labels(dataname):
   return labels
 
 
-def get_sub_train_labels(dataname, idx):
-  dataname = os.path.join(dataname, 'naive')
+def get_sub_train_labels(dataname, idx, partitions):
+  dataname = os.path.join(dataname, '{}naive'.format(partitions))
   sub_label_file = os.path.join(dataname, 'sub_label_{}.npy'.format(idx))
   sub_label = np.load(sub_label_file)
   return sub_label
