@@ -29,21 +29,32 @@ class GraphCacheServer:
                used in fetch features from remote
     """
     self.graph = graph
+    self.gpuid = gpuid
     self.node_num = node_num
-    self.nid_map = nid_map
+    self.nid_map = nid_map.clone().detach().cuda(self.gpuid)
+    self.nid_map.requires_grad_(False)
     
     # masks for manage the feature locations: default in CPU
-    self.cpu_flag = torch.ones(self.node_num).bool()
-    self.gpu_flag = torch.zeros(self.node_num).bool()
+    self.cpu_flag = torch.ones(self.node_num).bool().cuda(self.gpuid)
+    self.cpu_flag.requires_grad_(False)
+    self.gpu_flag = torch.zeros(self.node_num).bool().cuda(self.gpuid)
+    self.gpu_flag.requires_grad_(False)
+
+    self.cached_num = 0
+    self.capability = node_num
 
     # gpu tensor cache
-    self.gpuid = gpuid
-    self.cached_num = 0
     self.full_cached = False
     self.dims = {}          # {'field name': dims of the tensor data of a node}
     self.gpu_fix_cache = dict() # {'field name': tensor data for cached nodes in gpu}
     with torch.cuda.device(self.gpuid):
       self.localid2cacheid = torch.cuda.LongTensor(node_num).fill_(0)
+      self.localid2cacheid.requires_grad_(False)
+
+
+  def limit_capability(self, capability):
+    self.capability = capability
+
   
 
   def get_feat_from_server(self, nids, embed_names, to_gpu=False):
@@ -51,13 +62,13 @@ class GraphCacheServer:
     Fetch features of `nids` from remote server in shared CPU
     Params
       g: created from `dgl.contrib.graph_store.create_graph_from_store`
-      nids: required node ids in local graph
+      nids: required node ids in local graph, should be in gpu
       embed_names: field name list, e.g. ['features', 'norm']
     Return:
       feature tensors of these nids (in CPU)
     """
     nids_in_full = self.nid_map[nids]
-    cpu_frame = self.graph._node_frame[dgl.utils.toindex(nids_in_full)]
+    cpu_frame = self.graph._node_frame[dgl.utils.toindex(nids_in_full.cpu())]
     data_frame = {}
     for name in embed_names:
       if to_gpu:
@@ -72,13 +83,12 @@ class GraphCacheServer:
     User should make sure tensor data under every field name should
     have same num (axis 0)
     Params:
-      nids: numpy arrary: node ids to be cached in local graph.
-            should be equal to data rows
+      nids: node ids to be cached in local graph.
+            should be equal to data rows. should be in gpu
       data: dict: {'field name': tensor data}
     """
-    rows = nids.shape[0]
-    tnids = torch.tensor(nids).cuda(self.gpuid)
-    self.localid2cacheid[tnids] = torch.arange(rows).cuda(self.gpuid)
+    rows = nids.size(0)
+    self.localid2cacheid[nids] = torch.arange(rows).cuda(self.gpuid)
     self.cached_num = rows
     for name in data:
       data_rows = data[name].size(0)
@@ -86,8 +96,8 @@ class GraphCacheServer:
       self.dims[name] = data[name].size(1)
       self.gpu_fix_cache[name] = data[name].cuda(self.gpuid)
     # setup flags
-    self.cpu_flag[tnids] = False
-    self.gpu_flag[tnids] = True
+    self.cpu_flag[nids] = False
+    self.gpu_flag[nids] = True
     self.full_cached = is_full
 
   
@@ -105,28 +115,28 @@ class GraphCacheServer:
       self.fetch_from_cache(nodeflow)
       return
     for i in range(nodeflow.num_layers):
-      sub_nid = nodeflow.layer_parent_nid(i)
-      #nodeflow._node_frames[i] = FrameRef(Frame(num_rows=len(sub_nid)))
-      # get mask
-      sub_nid_gpu_mask = self.gpu_flag[sub_nid]
-      sub_nid_in_gpu = sub_nid[sub_nid_gpu_mask].cuda(self.gpuid)
-      sub_nid_cpu_mask = self.cpu_flag[sub_nid]
-      sub_nid_in_cpu = sub_nid[sub_nid_cpu_mask]
+      tnid = nodeflow.layer_parent_nid(i).cuda(self.gpuid)
+      # get nids -- overhead ~0.1s
+      gpu_mask = self.gpu_flag[tnid]
+      nids_in_gpu = tnid[gpu_mask]
+      cpu_mask = self.cpu_flag[tnid]
+      nids_in_cpu = tnid[cpu_mask]
       # create frame
       with torch.cuda.device(self.gpuid):
-        frame = {name: torch.cuda.FloatTensor(len(sub_nid), self.dims[name]) \
+        frame = {name: torch.cuda.FloatTensor(tnid.size(0), self.dims[name]) \
                   for name in self.gpu_fix_cache}
-      ##NOTE: can be paralleled io
       # for gpu cached tensors: ##NOTE: Make sure it is in-place update!
-      for name in self.gpu_fix_cache:
-        cacheid = self.localid2cacheid[sub_nid_in_gpu]
-        frame[name][sub_nid_in_gpu] = self.gpu_fix_cache[name][cacheid]
+      if nids_in_gpu.size(0) != 0:
+        for name in self.gpu_fix_cache:
+          cacheid = self.localid2cacheid[nids_in_gpu]
+          frame[name][gpu_mask] = self.gpu_fix_cache[name][cacheid]
       # for cpu cached tensors: ##NOTE: Make sure it is in-place update!
-      cpu_nid_infull = self.nid_map[sub_nid_in_cpu]
-      cpu_data = self.graph._node_frame[dgl.utils.toindex(cpu_nid_infull)]
-      for name in self.gpu_fix_cache:
-        frame[name][sub_nid_in_cpu] = cpu_data[name].cuda(self.gpuid)
-      nodeflow._node_frames[i] = FrameRef(frame)
+      if nids_in_cpu.size(0) != 0:
+        cpu_data_frame = self.get_feat_from_server(
+          nids_in_cpu, list(self.dims), to_gpu=True)
+        for name in self.dims:
+          frame[name][cpu_mask] = cpu_data_frame[name]
+      nodeflow._node_frames[i] = FrameRef(Frame(frame))
 
 
   def fetch_from_cache(self, nodeflow):
