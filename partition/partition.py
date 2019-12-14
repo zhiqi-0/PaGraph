@@ -204,7 +204,7 @@ def naive(args):
   adj_file = os.path.join(args.dataset, 'adj.npz')
   mask_file = os.path.join(args.dataset, 'train.npy')
   label_file = os.path.join(args.dataset, 'labels.npy')
-  partition_dataset = os.path.join(args.dataset, 'naive')
+  partition_dataset = os.path.join(args.dataset, '{}naive'.format(args.partition))
   try:
     os.mkdir(partition_dataset)
   except FileExistsError:
