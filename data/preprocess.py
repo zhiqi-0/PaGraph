@@ -83,7 +83,7 @@ def random_label(vnum, class_num, outfile=None):
 def split_dataset(vnum, outdir=None):
   """
   Split dataset to train/val/test.
-  train:val:test = 7:1:2
+  train:val:test = 6.5:1:1.5 - similar to reddit
   if outdir is provided:
     save as outdir/train.npy,
             outdir/val.npy,
@@ -94,7 +94,7 @@ def split_dataset(vnum, outdir=None):
   """
   nids = np.arange(vnum)
   np.random.shuffle(nids)
-  train_len = int(vnum * 0.7)
+  train_len = int(vnum * 0.65)
   val_len = int(vnum * 0.1)
   test_len = vnum - train_len - val_len
   # train mask
@@ -128,7 +128,7 @@ if __name__ == '__main__':
 
   parser.add_argument("--gen-feature", dest='gen_feature', action='store_true')
   parser.set_defaults(gen_feature=False)
-  parser.add_argument("--feat-size", type=int, default=300,
+  parser.add_argument("--feat-size", type=int, default=600,
                       help='generated feature size if --gen-feature is specified')
   
   parser.add_argument("--gen-label", dest='gen_label', action='store_true')
