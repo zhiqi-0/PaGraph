@@ -53,7 +53,7 @@ def trainer(rank, world_size, args, backend='nccl'):
   embed_names = ['features', 'norm']
   cacher = storage.GraphCacheServer(remote_g, adj.shape[0], t2fid, rank)
   cacher.init_field(embed_names)
-  cacher.log = True
+  cacher.log = False
 
   # prepare model
   num_hops = args.n_layers if args.preprocess else args.n_layers

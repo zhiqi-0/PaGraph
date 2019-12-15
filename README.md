@@ -19,7 +19,7 @@ Graph Neural Network Framework on Large Scaled Graph Dataset with Multi-GPUs tra
   * Use [PaRMAT](https://github.com/farkhor/PaRMAT) to generate a graph:
 
     ```bash
-    $ ./PaRMAT -noDuplicateEdges -undirected -noEdgeToSelf -threads 16 -nVertices 10 -nEdges 25 -output /path/to/datafolder/pp.txt
+    $ ./PaRMAT -noDuplicateEdges -undirected -threads 16 -nVertices 10 -nEdges 25 -output /path/to/datafolder/pp.txt
 
     ```
   
@@ -45,7 +45,7 @@ Graph Neural Network Framework on Large Scaled Graph Dataset with Multi-GPUs tra
 * PyTorch
 
   ```bash
-  $ python server/pytorch/launch_server.py --dataset xxx/datasetfolder --num-workers 3
+  $ python server/pytorch/launch_server.py --num-workers 3 --preprocess --dataset xxx/datasetfolder
   ```
 
 * MXNet
@@ -75,6 +75,15 @@ Graph Neural Network Framework on Large Scaled Graph Dataset with Multi-GPUs tra
     ```bash
     DGLBACKEND=mxnet python examples/mxnet/launch.py -n 2 -s 1 --launcher local python examples/mxnet/gcn_nssc.py --dataset /home/lzq/data/graph-gen/3mv150me --ngpu 2 --batch-size 2500 --n-epochs 60 --num-neighbors 2
     ```
+
+* Run on Reddit-small dataset:
+
+  * Pytorch
+
+    ```bash
+    $ DGLBACKEND=pytorch python examples/pytorch/stgcn_nssc.py --gpu 0,1 --num-neighbors 2 --batch-size 3000 --dataset /home/lzq/data/reddit-small --feat-size 602 --n-classes 41 --preprocess
+    ```
+
 
 ### Profiling with NVProf
 

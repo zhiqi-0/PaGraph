@@ -48,7 +48,7 @@ def trainer(rank, world_size, args, backend='nccl'):
   test_mask = torch.ByteTensor(test_mask)
 
   # prepare model
-  num_hops = args.n_layers if args.preprocess else args.n_layers
+  num_hops = args.n_layers if args.preprocess else args.n_layers + 1
   model = GCNSampling(args.feat_size,
                       args.n_hidden,
                       n_classes,
