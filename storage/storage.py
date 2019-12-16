@@ -82,6 +82,8 @@ class GraphCacheServer:
     available = total_mem - peak_allocated_mem - 512 * 1024 * 1024 # in bytes
     # Stpe2: get capability
     self.capability = int(available / (self.total_dim * 4)) # assume float32 = 4 bytes
+    print('Cache Memory: {}G. Capability: {}'
+          .format(available / 1024 / 1024 / 1024, self.capability))
     # Step3: cache
     if self.capability >= self.node_num:
       # fully cache
@@ -91,7 +93,8 @@ class GraphCacheServer:
       self.cache_fix_data(full_nids, data_frame, is_full=True)
     else:
       # choose top-cap out-degree nodes to cache
-      print('cache the part of graph...')
+      print('cache the part of graph... caching percentage: {:.4f}'
+            .format(self.capability / self.node_num))
       out_degrees = dgl_g.out_degrees()
       sort_nid = torch.argsort(out_degrees, descending=True)
       cache_nid = sort_nid[:self.capability]
