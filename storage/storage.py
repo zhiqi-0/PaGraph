@@ -82,7 +82,7 @@ class GraphCacheServer:
     available = total_mem - peak_allocated_mem - 512 * 1024 * 1024 # in bytes
     # Stpe2: get capability
     self.capability = int(available / (self.total_dim * 4)) # assume float32 = 4 bytes
-    print('Cache Memory: {}G. Capability: {}'
+    print('Cache Memory: {:.2f}G. Capability: {}'
           .format(available / 1024 / 1024 / 1024, self.capability))
     # Step3: cache
     if self.capability >= self.node_num:
