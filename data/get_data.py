@@ -17,9 +17,15 @@ def get_graph_data(dataname):
   adj = scipy.sparse.load_npz(
     os.path.join(dataname, 'adj.npz')
   )
-  feat = np.load(
-    os.path.join(dataname, 'feat.npy')
-  )
+  try:
+    feat = np.load(
+      os.path.join(dataname, 'feat.npy')
+    )
+  except FileNotFoundError:
+    print('random generate feat...')
+    import torch
+    feat = torch.rand((adj.shape[0], 600))
+  
   return adj, feat
 
 
