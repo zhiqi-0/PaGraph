@@ -76,8 +76,10 @@ class GraphCacheServer:
     """
     # Step1: get available GPU memory
     peak_allocated_mem = torch.cuda.max_memory_allocated(device=self.gpuid)
+    peak_cached_mem = torch.cuda.max_memory_cached(device=self.gpuid)
     total_mem = torch.cuda.get_device_properties(self.gpuid).total_memory
-    available = total_mem - peak_allocated_mem - 1024 * 1024 * 1024 # in bytes
+    available = total_mem - peak_allocated_mem - peak_cached_mem \
+                - 1024 * 1024 * 1024 # in bytes
     # Stpe2: get capability
     self.capability = int(available / (self.total_dim * 4)) # assume float32 = 4 bytes
     print('Cache Memory: {:.2f}G. Capability: {}'
