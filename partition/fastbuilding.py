@@ -52,7 +52,11 @@ def get_sub_graph(dgl_g, train_nid, num_hops):
   data = np.ones(sub_srcs.shape[0], dtype=np.uint8)
   coo_adj = spsp.coo_matrix((data, (sub_srcs, sub_dsts)), shape=(vnum, vnum))
   # train nid
-  subtrainid = full2sub[nf.layer_parent_nid(-1).numpy()]
+  tnid = nf.layer_parent_nid(-1).numpy()
+  valid_t_max = np.max(sub2full)
+  valid_t_min = np.min(tnid)
+  tnid = np.where(tnid <= valid_t_max, tnid, valid_t_min)
+  subtrainid = full2sub[np.unique(tnid)]
   return coo_adj, sub2full, subtrainid
 
 
@@ -71,6 +75,7 @@ if __name__ == "__main__":
   dgl_g = DGLGraph(adj, readonly=True)
   train_mask, val_mask, test_mask = data.get_masks(args.dataset)
   train_nid = np.nonzero(train_mask)[0].astype(np.int64)
+  np.random.shuffle(train_nid)
   labels = data.get_labels(args.dataset)
 
   # save

@@ -35,8 +35,6 @@ class GraphCacheServer:
     self.nid_map.requires_grad_(False)
     
     # masks for manage the feature locations: default in CPU
-    self.cpu_flag = torch.ones(self.node_num).bool().cuda(self.gpuid)
-    self.cpu_flag.requires_grad_(False)
     self.gpu_flag = torch.zeros(self.node_num).bool().cuda(self.gpuid)
     self.gpu_flag.requires_grad_(False)
 
@@ -79,7 +77,7 @@ class GraphCacheServer:
     # Step1: get available GPU memory
     peak_allocated_mem = torch.cuda.max_memory_allocated(device=self.gpuid)
     total_mem = torch.cuda.get_device_properties(self.gpuid).total_memory
-    available = total_mem - peak_allocated_mem - 512 * 1024 * 1024 # in bytes
+    available = total_mem - peak_allocated_mem - 1024 * 1024 * 1024 # in bytes
     # Stpe2: get capability
     self.capability = int(available / (self.total_dim * 4)) # assume float32 = 4 bytes
     print('Cache Memory: {:.2f}G. Capability: {}'
@@ -141,7 +139,6 @@ class GraphCacheServer:
       self.dims[name] = data[name].size(1)
       self.gpu_fix_cache[name] = data[name].cuda(self.gpuid)
     # setup flags
-    self.cpu_flag[nids] = False
     self.gpu_flag[nids] = True
     self.full_cached = is_full
 
@@ -164,7 +161,7 @@ class GraphCacheServer:
       # get nids -- overhead ~0.1s
       gpu_mask = self.gpu_flag[tnid]
       nids_in_gpu = tnid[gpu_mask]
-      cpu_mask = self.cpu_flag[tnid]
+      cpu_mask = ~gpu_mask
       nids_in_cpu = tnid[cpu_mask]
       # create frame
       with torch.cuda.device(self.gpuid):
@@ -172,8 +169,8 @@ class GraphCacheServer:
                   for name in self.dims}
       # for gpu cached tensors: ##NOTE: Make sure it is in-place update!
       if nids_in_gpu.size(0) != 0:
+        cacheid = self.localid2cacheid[nids_in_gpu]
         for name in self.dims:
-          cacheid = self.localid2cacheid[nids_in_gpu]
           frame[name][gpu_mask] = self.gpu_fix_cache[name][cacheid]
       # for cpu cached tensors: ##NOTE: Make sure it is in-place update!
       if nids_in_cpu.size(0) != 0:

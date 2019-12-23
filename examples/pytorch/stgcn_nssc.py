@@ -80,8 +80,8 @@ def trainer(rank, world_size, args, backend='nccl'):
 
   # start training
   epoch_dur = []
-  batch_dur = []
   for epoch in range(args.n_epochs):
+    batch_dur = []
     model.train()
     epoch_start_time = time.time()
     step = 0
