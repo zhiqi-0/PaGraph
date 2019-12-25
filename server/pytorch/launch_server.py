@@ -42,23 +42,28 @@ def main(args):
   
   # calculate norm for gcn
   dgl_g = DGLGraph(graph, readonly=True)
-  norm = 1. / dgl_g.in_degrees().float().unsqueeze(1)
 
-  # preprocess 
-  if args.preprocess:
-    print('Preprocessing features...')
-    dgl_g.ndata['norm'] = norm
-    dgl_g.ndata['features'] = features
-    dgl_g.update_all(fn.copy_src(src='features', out='m'),
-                     fn.sum(msg='m', out='preprocess'),
-                     lambda node : {'preprocess': node.data['preprocess'] * node.data['norm']})
-    features = dgl_g.ndata['preprocess']
+  if args.model == 'gcn':
+    norm = 1. / dgl_g.in_degrees().float().unsqueeze(1)
+    # preprocess 
+    if args.preprocess:
+      print('Preprocessing features...')
+      dgl_g.ndata['norm'] = norm
+      dgl_g.ndata['features'] = features
+      dgl_g.update_all(fn.copy_src(src='features', out='m'),
+                       fn.sum(msg='m', out='preprocess'),
+                       lambda node : {'preprocess': node.data['preprocess'] * node.data['norm']})
+      features = dgl_g.ndata['preprocess']
+    g.ndata['norm'] = norm
+    g.ndata['features'] = features
+
+  elif args.model == 'graphsage':
+    print('preprocessing: warning: jusy copy')
+    if args.preprocess: # for simple preprocessing
+      g.ndata['neigh'] = features
+    g.ndata['features'] = features
+  
   del dgl_g
-
-  # setup features and norms
-  g.ndata['norm'] = norm
-  g.ndata['features'] = features
-
   print('start running graph server on dataset: {}'.format(graph_name))
   g.run()
 
@@ -72,6 +77,9 @@ if __name__ == '__main__':
   parser.add_argument("--num-workers", type=int, default=1,
                       help="the number of workers")
   
+  parser.add_argument("--model", type=str, default="gcn",
+                      help="model type for preprocessing")
+
   parser.add_argument("--preprocess", dest='preprocess', action='store_true')
   parser.set_defaults(preprocess=False)
   
