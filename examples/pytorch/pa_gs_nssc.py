@@ -50,13 +50,16 @@ def trainer(rank, world_size, args, backend='nccl'):
   # to torch tensor
   t2fid = torch.LongTensor(t2fid)
   labels = torch.LongTensor(labels)
-  embed_names = ['features', 'neigh']
+  if args.preprocess:
+    embed_names = ['features', 'neigh']
+  else:
+    embed_names = ['features']
   cacher = storage.GraphCacheServer(remote_g, adj.shape[0], t2fid, rank)
   cacher.init_field(embed_names)
   cacher.log = False
 
   # prepare model
-  num_hops = args.n_layers if args.preprocess else args.n_layers
+  num_hops = args.n_layers if args.preprocess else args.n_layers + 1
   model = GraphSageSampling(args.feat_size,
                             args.n_hidden,
                             n_classes,
@@ -77,7 +80,9 @@ def trainer(rank, world_size, args, backend='nccl'):
   epoch_dur = []
   for epoch in range(args.n_epochs):
     batch_dur = []
+    sample_dur = []
     model.train()
+    b_start = time.time()
     epoch_start_time = time.time()
     step = 0
     for nf in dgl.contrib.sampling.NeighborSampler(g, args.batch_size,
@@ -88,6 +93,7 @@ def trainer(rank, world_size, args, backend='nccl'):
                                                   num_hops=num_hops,
                                                   seed_nodes=train_nid,
                                                   prefetch=True):
+      sample_dur.append(time.time() - b_start)
       batch_start_time = time.time()
       cacher.fetch_data(nf)
       batch_nids = nf.layer_parent_nid(-1)
@@ -105,8 +111,11 @@ def trainer(rank, world_size, args, backend='nccl'):
       if epoch == 0 and step == 1:
         cacher.auto_cache(g, embed_names)
       if rank == 0 and step % 20 == 0:
-        print('epoch [{}] step [{}]. Loss: {:.4f} Batch average time(s): {:.4f}'
-              .format(epoch + 1, step, loss.item(), np.mean(np.array(batch_dur))))
+        print('epoch [{}] step [{}]. Loss: {:.4f} Batch average time(s): {:.4f} Sample time: {:.4f}'
+              .format(epoch + 1, step, loss.item(),
+                      np.mean(np.array(batch_dur)), np.mean(np.array(sample_dur[1:])))
+             )
+      b_start = time.time()
 
     if rank == 0:
       epoch_dur.append(time.time() - epoch_start_time)

@@ -86,7 +86,7 @@ class GraphSageSampling(nn.Module):
           h = self.activation(h)
         nf.layers[i].data['h'] = h
     else:
-      for lid in range(1, nf.num_layers):
+      for lid in range(nf.num_layers):
         nf.layers[lid].data['h'] = nf.layers[lid].data.pop('features')
 
     for lid, layer in enumerate(self.layers):

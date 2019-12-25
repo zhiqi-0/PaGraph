@@ -58,8 +58,8 @@ def main(args):
     g.ndata['features'] = features
 
   elif args.model == 'graphsage':
-    print('preprocessing: warning: jusy copy')
     if args.preprocess: # for simple preprocessing
+      print('preprocessing: warning: jusy copy')
       g.ndata['neigh'] = features
     g.ndata['features'] = features
   

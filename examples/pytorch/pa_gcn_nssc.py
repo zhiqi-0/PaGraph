@@ -20,6 +20,7 @@ from dgl import DGLGraph
 
 from PaGraph.model.pytorch.gcn_nssc import GCNSampling, GCNInfer
 import PaGraph.data as data
+import PaGraph.storage as storage
 
 def init_process(rank, world_size, backend):
   os.environ['MASTER_ADDR'] = '127.0.0.1'
@@ -38,27 +39,24 @@ def trainer(rank, world_size, args, backend='nccl'):
   dataname = os.path.basename(args.dataset)
   remote_g = dgl.contrib.graph_store.create_graph_from_store(dataname, "shared_mem")
 
-  adj, t2fid = data.get_sub_train_graph(args.dataset, rank)
+  adj, t2fid = data.get_sub_train_graph(args.dataset, rank, world_size)
   g = DGLGraph(adj, readonly=True)
   n_classes = args.n_classes
-  train_nid = data.get_sub_train_nid(args.dataset, rank)
-  sub_labels = data.get_sub_train_labels(args.dataset, rank)
+  train_nid = data.get_sub_train_nid(args.dataset, rank, world_size)
+  sub_labels = data.get_sub_train_labels(args.dataset, rank, world_size)
   labels = np.zeros(np.max(train_nid) + 1, dtype=np.int)
   labels[train_nid] = sub_labels
 
-  
   # to torch tensor
   t2fid = torch.LongTensor(t2fid)
   labels = torch.LongTensor(labels)
-  print('Caching data from remote server...')
-  features = data.get_feat_from_server(remote_g, t2fid, "features").cuda(rank)
-  norm = data.get_feat_from_server(remote_g, t2fid, "norm").cuda(rank)
-  g.ndata['features'] = features
-  g.ndata['norm'] = norm
-  print('Done. Start Training...')
+  embed_names = ['features', 'norm']
+  cacher = storage.GraphCacheServer(remote_g, adj.shape[0], t2fid, rank)
+  cacher.init_field(embed_names)
+  cacher.log = False
 
   # prepare model
-  num_hops = args.n_layers if args.preprocess else args.n_layers
+  num_hops = args.n_layers if args.preprocess else args.n_layers + 1
   model = GCNSampling(args.feat_size,
                       args.n_hidden,
                       n_classes,
@@ -82,8 +80,8 @@ def trainer(rank, world_size, args, backend='nccl'):
 
   # start training
   epoch_dur = []
-  batch_dur = []
   for epoch in range(args.n_epochs):
+    batch_dur = []
     model.train()
     epoch_start_time = time.time()
     step = 0
@@ -96,7 +94,7 @@ def trainer(rank, world_size, args, backend='nccl'):
                                                   seed_nodes=train_nid,
                                                   prefetch=True):
       batch_start_time = time.time()
-      nf.copy_from_parent()
+      cacher.fetch_data(nf)
       batch_nids = nf.layer_parent_nid(-1)
       label = labels[batch_nids]
       label = label.cuda(rank, non_blocking=True)
@@ -109,12 +107,19 @@ def trainer(rank, world_size, args, backend='nccl'):
 
       step += 1
       batch_dur.append(time.time() - batch_start_time)
+      if epoch == 0 and step == 1:
+        cacher.auto_cache(g, embed_names)
       if rank == 0 and step % 20 == 0:
         print('epoch [{}] step [{}]. Loss: {:.4f} Batch average time(s): {:.4f}'
               .format(epoch + 1, step, loss.item(), np.mean(np.array(batch_dur))))
+
     if rank == 0:
       epoch_dur.append(time.time() - epoch_start_time)
       print('Epoch average time: {:.4f}'.format(np.mean(np.array(epoch_dur[2:]))))
+
+    if cacher.log:
+      miss_rate = cacher.get_miss_rate()
+      print('Epoch average miss rate: {:.4f}'.format(miss_rate))
     
     # saving after several epochs
     if (epoch + 1) % 5 == 0 and rank == 0:
