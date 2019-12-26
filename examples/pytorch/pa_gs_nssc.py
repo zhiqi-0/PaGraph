@@ -80,7 +80,6 @@ def trainer(rank, world_size, args, backend='nccl'):
   epoch_dur = []
   for epoch in range(args.n_epochs):
     batch_dur = []
-    sample_dur = []
     model.train()
     b_start = time.time()
     epoch_start_time = time.time()
@@ -93,7 +92,6 @@ def trainer(rank, world_size, args, backend='nccl'):
                                                   num_hops=num_hops,
                                                   seed_nodes=train_nid,
                                                   prefetch=True):
-      sample_dur.append(time.time() - b_start)
       batch_start_time = time.time()
       cacher.fetch_data(nf)
       batch_nids = nf.layer_parent_nid(-1)
@@ -111,11 +109,10 @@ def trainer(rank, world_size, args, backend='nccl'):
       if epoch == 0 and step == 1:
         cacher.auto_cache(g, embed_names)
       if rank == 0 and step % 20 == 0:
-        print('epoch [{}] step [{}]. Loss: {:.4f} Batch average time(s): {:.4f} Sample time: {:.4f}'
+        print('epoch [{}] step [{}]. Loss: {:.4f} Batch average time(s): {:.4f}'
               .format(epoch + 1, step, loss.item(),
-                      np.mean(np.array(batch_dur)), np.mean(np.array(sample_dur[1:])))
+                      np.mean(np.array(batch_dur)))
              )
-      b_start = time.time()
 
     if rank == 0:
       epoch_dur.append(time.time() - epoch_start_time)
