@@ -110,9 +110,7 @@ def trainer(rank, world_size, args, backend='nccl'):
         cacher.auto_cache(g, embed_names)
       if rank == 0 and step % 20 == 0:
         print('epoch [{}] step [{}]. Loss: {:.4f} Batch average time(s): {:.4f}'
-              .format(epoch + 1, step, loss.item(),
-                      np.mean(np.array(batch_dur)))
-             )
+              .format(epoch + 1, step, loss.item(), np.mean(np.array(batch_dur))))
 
     if rank == 0:
       epoch_dur.append(time.time() - epoch_start_time)
