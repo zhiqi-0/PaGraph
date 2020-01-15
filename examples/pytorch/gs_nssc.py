@@ -24,7 +24,7 @@ def init_process(rank, world_size, backend):
   os.environ['MASTER_ADDR'] = '127.0.0.1'
   os.environ['MASTER_PORT'] = '29501'
   dist.init_process_group(backend, rank=rank, world_size=world_size)
-  #torch.cuda.set_device(rank)
+  torch.cuda.set_device(rank)
   torch.manual_seed(rank)
   print('rank [{}] process successfully launches'.format(rank))
 
@@ -55,7 +55,7 @@ def trainer(rank, world_size, args, backend='nccl'):
                             args.n_layers,
                             F.relu,
                             args.dropout,
-                            'pool',
+                            'mean',
                             args.preprocess)
   loss_fcn = torch.nn.CrossEntropyLoss()
   optimizer = torch.optim.Adam(model.parameters(),
@@ -116,7 +116,7 @@ if __name__ == '__main__':
   parser.add_argument("--dataset", type=str, default=None,
                       help="path to the dataset folder")
   # model arch
-  parser.add_argument("--feat-size", type=int, default=300,
+  parser.add_argument("--feat-size", type=int, default=600,
                       help='input feature size')
   parser.add_argument("--n-classes", type=int, default=60)
   parser.add_argument("--dropout", type=float, default=0.2,

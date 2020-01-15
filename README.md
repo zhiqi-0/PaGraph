@@ -45,7 +45,7 @@ Graph Neural Network Framework on Large Scaled Graph Dataset with Multi-GPUs tra
 * PyTorch
 
   ```bash
-  $ python server/pytorch/launch_server.py --num-workers 3 --preprocess --dataset xxx/datasetfolder
+  $ python server/pytorch/launch_server.py --num-workers 4 --preprocess --dataset xxx/datasetfolder
   ```
 
 * MXNet
@@ -81,7 +81,11 @@ Graph Neural Network Framework on Large Scaled Graph Dataset with Multi-GPUs tra
   * Pytorch
 
     ```bash
-    $ DGLBACKEND=pytorch python examples/pytorch/stgcn_nssc.py --gpu 0,1 --num-neighbors 2 --batch-size 3000 --dataset /home/lzq/data/reddit-small --feat-size 602 --n-classes 41 --preprocess
+    $ DGLBACKEND=pytorch python examples/pytorch/pa_gcn_nssc.py --gpu 0,1 --num-neighbors 2 --batch-size 6000 --dataset /home/lzq/data/reddit-small --feat-size 602 --n-classes 41 --preprocess
+    ```
+
+    ```bash
+    $ DGLBACKEND=pytorch OMP_NUM_THREADS=2 python examples/pytorch/pa_gcn_nssc.py --num-neighbors 2 --batch-size 6000 --feat-size 600 --gpu 0,1 --dataset /home/lzq/data/livejournal --preprocess
     ```
 
 

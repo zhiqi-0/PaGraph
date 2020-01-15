@@ -16,9 +16,8 @@ import torch.multiprocessing as mp
 import torch.nn.functional as F
 import numpy as np
 import dgl
-from dgl import DGLGraph
 
-from PaGraph.model.pytorch.graphsage_nssc import GraphSageSampling
+from PaGraph.model.pytorch.gcn_nssc import GCNSampling, GCNInfer
 import PaGraph.data as data
 import PaGraph.storage as storage
 
@@ -30,69 +29,75 @@ def init_process(rank, world_size, backend):
   torch.manual_seed(rank)
   print('rank [{}] process successfully launches'.format(rank))
 
-
 def trainer(rank, world_size, args, backend='nccl'):
   # init multi process
   init_process(rank, world_size, backend)
   
   # load data
   dataname = os.path.basename(args.dataset)
-  remote_g = dgl.contrib.graph_store.create_graph_from_store(dataname, "shared_mem")
-
-  adj, t2fid = data.get_sub_train_graph(args.dataset, rank, world_size)
-  g = DGLGraph(adj, readonly=True)
-  n_classes = args.n_classes
-  train_nid = data.get_sub_train_nid(args.dataset, rank, world_size)
-  sub_labels = data.get_sub_train_labels(args.dataset, rank, world_size)
-  labels = np.zeros(np.max(train_nid) + 1, dtype=np.int)
-  labels[train_nid] = sub_labels
-
+  g = dgl.contrib.graph_store.create_graph_from_store(dataname, "shared_mem")
+  labels = data.get_labels(args.dataset)
+  n_classes = len(np.unique(labels))
+  # masks for semi-supervised learning
+  train_mask, val_mask, test_mask = data.get_masks(args.dataset)
+  train_nid = np.nonzero(train_mask)[0].astype(np.int64)
+  test_nid = np.nonzero(test_mask)[0].astype(np.int64)
   # to torch tensor
-  t2fid = torch.LongTensor(t2fid)
   labels = torch.LongTensor(labels)
-  if args.preprocess:
-    embed_names = ['features', 'neigh']
-  else:
-    embed_names = ['features']
-  cacher = storage.GraphCacheServer(remote_g, adj.shape[0], t2fid, rank)
+  train_mask = torch.ByteTensor(train_mask)
+  val_mask = torch.ByteTensor(val_mask)
+  test_mask = torch.ByteTensor(test_mask)
+
+  # cacher
+  embed_names = ['features', 'norm']
+  vnum = train_mask.size(0)
+  maps = torch.arange(vnum)
+  cacher = storage.GraphCacheServer(g, vnum, maps, rank)
   cacher.init_field(embed_names)
-  cacher.log = False
+  cacher.log = True
 
   # prepare model
   num_hops = args.n_layers if args.preprocess else args.n_layers + 1
-  model = GraphSageSampling(args.feat_size,
-                            args.n_hidden,
-                            n_classes,
-                            args.n_layers,
-                            F.relu,
-                            args.dropout,
-                            'mean',
-                            args.preprocess)
+  model = GCNSampling(args.feat_size,
+                      args.n_hidden,
+                      n_classes,
+                      args.n_layers,
+                      F.relu,
+                      args.dropout,
+                      args.preprocess)
+  infer_model = GCNInfer(args.feat_size,
+                         args.n_hidden,
+                         n_classes,
+                         args.n_layers,
+                         F.relu)
   loss_fcn = torch.nn.CrossEntropyLoss()
   optimizer = torch.optim.Adam(model.parameters(),
                                lr=args.lr,
                                weight_decay=args.weight_decay)
   model.cuda(rank)
+  infer_model.cuda(rank)
   model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[rank])
   ctx = torch.device(rank)
 
   # start training
   epoch_dur = []
+  batch_dur = []
+  chunk_size = int(train_nid.shape[0] / world_size) - 1
+  train_nid = train_nid[chunk_size * rank:chunk_size * (rank + 1)]
   for epoch in range(args.n_epochs):
-    batch_dur = []
     model.train()
-    b_start = time.time()
     epoch_start_time = time.time()
     step = 0
     for nf in dgl.contrib.sampling.NeighborSampler(g, args.batch_size,
                                                   args.num_neighbors,
                                                   neighbor_type='in',
                                                   shuffle=True,
-                                                  num_workers=8,
+                                                  num_workers=16,
                                                   num_hops=num_hops,
                                                   seed_nodes=train_nid,
                                                   prefetch=True):
       batch_start_time = time.time()
+
       cacher.fetch_data(nf)
       batch_nids = nf.layer_parent_nid(-1)
       label = labels[batch_nids]
@@ -105,24 +110,24 @@ def trainer(rank, world_size, args, backend='nccl'):
       optimizer.step()
 
       step += 1
+      loss.item()
       batch_dur.append(time.time() - batch_start_time)
       if epoch == 0 and step == 1:
         cacher.auto_cache(g, embed_names)
       if rank == 0 and step % 20 == 0:
         print('epoch [{}] step [{}]. Loss: {:.4f} Batch average time(s): {:.4f}'
               .format(epoch + 1, step, loss.item(), np.mean(np.array(batch_dur))))
-
     if rank == 0:
       epoch_dur.append(time.time() - epoch_start_time)
       print('Epoch average time: {:.4f}'.format(np.mean(np.array(epoch_dur[2:]))))
 
     if cacher.log:
       miss_rate = cacher.get_miss_rate()
-      print('Epoch average miss rate: {:.4f}'.format(miss_rate))
+      print('Rank {}:Epoch average miss rate: {:.4f}'.format(rank, miss_rate))
     
     # saving after several epochs
     if (epoch + 1) % 5 == 0 and rank == 0:
-      filepath = os.path.join(args.ckpt, 'gs-nssc_{}'.format(epoch + 1))
+      filepath = os.path.join(args.ckpt, 'gcn-nssc_{}'.format(epoch + 1))
       print('saving to {}'.format(filepath))
       torch.save(model.module, filepath)
 
@@ -135,19 +140,18 @@ if __name__ == '__main__':
   parser.add_argument("--dataset", type=str, default=None,
                       help="path to the dataset folder")
   # model arch
-  parser.add_argument("--feat-size", type=int, default=600,
+  parser.add_argument("--feat-size", type=int, default=300,
                       help='input feature size')
-  parser.add_argument("--n-classes", type=int, default=60)
   parser.add_argument("--dropout", type=float, default=0.2,
                       help="dropout probability")
-  parser.add_argument("--n-hidden", type=int, default=16,
+  parser.add_argument("--n-hidden", type=int, default=32,
                       help="number of hidden gcn units")
   parser.add_argument("--n-layers", type=int, default=1,
                       help="number of hidden gcn layers")
   parser.add_argument("--preprocess", dest='preprocess', action='store_true')
   parser.set_defaults(preprocess=False)
   # training hyper-params
-  parser.add_argument("--lr", type=float, default=1e-2,
+  parser.add_argument("--lr", type=float, default=3e-2,
                       help="learning rate")
   parser.add_argument("--n-epochs", type=int, default=60,
                       help="number of training epochs")

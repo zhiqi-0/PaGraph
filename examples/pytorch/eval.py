@@ -27,26 +27,32 @@ def gnneval(args, infer_model, train_model, graph, labels, rank, test_nid):
     infer_param.data.copy_(param.data)
   infer_model.cuda(ctx)
 
-  num_acc = 0.
-  step = 0
-  for nf in dgl.contrib.sampling.NeighborSampler(graph,args.batch_size,
+  num_hops = args.n_layers if args.preprocess else args.n_layers + 1
+  for nf in dgl.contrib.sampling.NeighborSampler(graph,len(test_nid),
                                                  graph.number_of_nodes(),
                                                  neighbor_type='in',
                                                  num_workers=16,
-                                                 num_hops=args.n_layers+1,
+                                                 num_hops=num_hops,
                                                  seed_nodes=test_nid):
     nf.copy_from_parent(ctx=ctx)
+  
+  for ckpt in range(2,50,2):
+    train_model = torch.load(
+      os.path.join(args.ckpt, args.arch + '_' + str(ckpt))
+    )
+    for infer_param, param in zip(infer_model.parameters(), train_model.parameters()):    
+      infer_param.data.copy_(param.data)
+    infer_model.cuda(ctx)
+
+    num_acc = 0.
     infer_model.eval()
     with torch.no_grad():
       pred = infer_model(nf)
       batch_nids = nf.layer_parent_nid(-1)
       batch_labels = labels[batch_nids].cuda(rank)
       num_acc += (pred.argmax(dim=1) == batch_labels).sum().cpu().item()
-    step += 1
-    if step % 20 == 0:
-      print('test step [{}]'.format(step))
     
-  print("Test Accuracy {:.4f}".format(num_acc / len(test_nid)))
+    print("Test Accuracy {:.4f}".format(num_acc / len(test_nid)))
 
 
 def main(args):
@@ -69,7 +75,8 @@ def main(args):
                            args.n_hidden,
                            n_classes,
                            args.n_layers,
-                           F.relu)
+                           F.relu,
+                           args.preprocess)
   else:
     print('Unknown arch')
     sys.exit(-1)
@@ -89,7 +96,7 @@ if __name__ == '__main__':
   # model arch
   parser.add_argument("--feat-size", type=int, default=300,
                       help='input feature size')
-  parser.add_argument("--n-hidden", type=int, default=128,
+  parser.add_argument("--n-hidden", type=int, default=32,
                       help="number of hidden gcn units")
   parser.add_argument("--n-layers", type=int, default=1,
                       help="number of hidden gcn layers")
@@ -101,6 +108,9 @@ if __name__ == '__main__':
   
   parser.add_argument("--ckpt", type=str, default='checkpoint',
                       help="checkpoint dir")
+  
+  parser.add_argument("--preprocess", dest='preprocess', action='store_true')
+  parser.set_defaults(preprocess=False)
   
   args = parser.parse_args()
 

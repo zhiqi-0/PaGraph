@@ -136,7 +136,7 @@ if __name__ == '__main__':
   parser.add_argument("--dataset", type=str, default=None,
                       help="path to the dataset folder")
   # model arch
-  parser.add_argument("--feat-size", type=int, default=300,
+  parser.add_argument("--feat-size", type=int, default=600,
                       help='input feature size')
   parser.add_argument("--n-classes", type=int, default=60)
   parser.add_argument("--dropout", type=float, default=0.2,
