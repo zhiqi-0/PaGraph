@@ -41,6 +41,8 @@ def trainer(rank, world_size, args, backend='nccl'):
   train_mask, val_mask, test_mask = data.get_masks(args.dataset)
   train_nid = np.nonzero(train_mask)[0].astype(np.int64)
   test_nid = np.nonzero(test_mask)[0].astype(np.int64)
+  chunk_size = int(train_nid.shape[0] / world_size) - 1
+  train_nid = train_nid[chunk_size * rank:chunk_size * (rank + 1)]
   # to torch tensor
   labels = torch.LongTensor(labels)
   train_mask = torch.ByteTensor(train_mask)
@@ -121,7 +123,7 @@ if __name__ == '__main__':
   parser.add_argument("--dataset", type=str, default=None,
                       help="path to the dataset folder")
   # model arch
-  parser.add_argument("--feat-size", type=int, default=300,
+  parser.add_argument("--feat-size", type=int, default=600,
                       help='input feature size')
   parser.add_argument("--dropout", type=float, default=0.2,
                       help="dropout probability")
@@ -134,9 +136,9 @@ if __name__ == '__main__':
   # training hyper-params
   parser.add_argument("--lr", type=float, default=3e-2,
                       help="learning rate")
-  parser.add_argument("--n-epochs", type=int, default=60,
+  parser.add_argument("--n-epochs", type=int, default=10,
                       help="number of training epochs")
-  parser.add_argument("--batch-size", type=int, default=2500,
+  parser.add_argument("--batch-size", type=int, default=6000,
                       help="batch size")
   parser.add_argument("--weight-decay", type=float, default=0,
                       help="Weight for L2 loss")
