@@ -18,7 +18,7 @@ import dgl.function as fn
 import multiprocessing
 
 import PaGraph.data as data
-import PaGraph.utils
+from PaGraph.parallel import SampleDeliver
 
 def main(args):
   coo_adj, feat = data.get_graph_data(args.dataset)
@@ -72,90 +72,14 @@ def main(args):
   if args.sample:
     train_mask, val_mask, test_mask = data.get_masks(args.dataset)
     train_nid = np.nonzero(train_mask)[0].astype(np.int64)
+    hops = args.gnn_layers - 1 if args.preprocess else args.gnn_layers
     print('Expected trainer#: {}. Start sampling at server end...'.format(args.num_workers))
-    if args.one2all:
-      sampler_proc = multiprocessing.Process(target=sample_one2all, args=(graph, train_nid, args))
-      sampler_proc.start()
-    else:
-      sampler_proc = sample_one2one(graph, train_nid, args)
-  
+    deliver = SampleDeliver(graph, train_nid, args.num_neighbors, hops, args.num_workers)
+    deliver.async_sample(args.n_epochs, args.batch_size, one2all=args.one2all)
+      
   print('start running graph server on dataset: {}'.format(graph_name))
   g.run()
-  sampler_proc.close()
-  sampler_proc.join()
 
-
-def sample_one2all(graph, train_nid, args):
-  # wait all trainers to connect
-  sock = PaGraph.utils.server(args.num_workers)
-  start_port = 8760
-  n_trainer = args.num_workers
-  num_hops = args.gnn_layers - 1 if args.preprocess else args.gnn_layers
-  namebook = {tid: '127.0.0.1:'+str(start_port+tid) for tid in range(n_trainer)}
-  sender = dgl.contrib.sampling.SamplerSender(namebook, net_type='socket')
-  sampler = dgl.contrib.sampling.NeighborSampler(graph, args.batch_size,
-              args.num_neighbors, neighbor_type='in',
-              shuffle=True, num_workers=n_trainer,
-              num_hops=num_hops, seed_nodes=train_nid,
-              prefetch=True, add_self_loop=False)
-  
-  for epoch in range(args.n_epochs):
-    tid = 0
-    idx = 0
-    for nf in sampler:
-      # send is a non-blocking func
-      sender.send(nf, tid % n_trainer)
-      tid += 1
-      if tid % n_trainer == 0:
-        idx += 1
-        if idx % 100 == 0:
-          PaGraph.utils.barrier(sock, role='server')
-    # temporary solution: makeup the unbalanced pieces
-    print('Epoch {} end. Next tid: {}'.format(epoch+1, tid % n_trainer))
-    while tid % n_trainer != 0:
-      sender.send(nf, tid % n_trainer)
-      print('Epoch {}: Makeup Sending tid: {}'.format(epoch+1, tid % n_trainer))
-      tid += 1
-    # signal all trainers for the end of one epoch
-    for tid in range(n_trainer):
-      sender.signal(tid)
-    # set barrier for waiting all trainers finish the current epoch
-    PaGraph.utils.barrier(sock, role='server')
-
-
-def sample_one2one(graph, train_nid, args):
-  n_trainer = args.num_workers
-  chunk_size = int(train_nid.shape[0] / n_trainer) - 1
-  p = multiprocessing.Pool()
-  for rank in range(args.num_workers):
-    print('Starting child sampler process {}'.format(rank))
-    sampler_nid = train_nid[chunk_size * rank:chunk_size * (rank + 1)]
-    p.apply_async(single_sampler, args=(graph, sampler_nid, rank, args))
-  return p
-
-
-def single_sampler(graph, train_nid, rank, args):
-  sock = PaGraph.utils.server(1, port=8200+rank)
-  n_trainer = args.num_workers
-  start_port = 8760
-  num_hops = args.gnn_layers - 1 if args.preprocess else args.gnn_layers
-  namebook = {0: '127.0.0.1:'+str(start_port+rank)}
-  sender = dgl.contrib.sampling.SamplerSender(namebook, net_type='socket')
-  sampler = dgl.contrib.sampling.NeighborSampler(graph, args.batch_size,
-            args.num_neighbors, neighbor_type='in',
-            shuffle=True, num_workers=2,
-            num_hops=num_hops, seed_nodes=train_nid,
-            prefetch=True, add_self_loop=False)
-  for epoch in range(args.n_epochs):
-    idx = 0
-    for nf in sampler:
-      sender.send(nf, 0)
-      idx += 1
-      if idx % 100 == 0:
-        PaGraph.utils.barrier(sock, role='server')
-    sender.signal(0)
-    # barrier
-    PaGraph.utils.barrier(sock, role='server')
 
 
 
