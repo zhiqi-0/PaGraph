@@ -14,6 +14,7 @@ import numpy as np
 import multiprocessing as mp
 import socket
 
+barrier_interval = 50
 
 class SampleLoader:
   """ SampleLoader
@@ -22,7 +23,7 @@ class SampleLoader:
   def __init__(self, graph, rank, one2all=True):
     # connect to server sampler:
     barrier_rank = 0 if one2all else rank
-    self._barrier = SampleBarrier('trainer', barrier_rank)
+    self._barrier = SampleBarrier('trainer', rank=barrier_rank)
 
     self._graph = graph
     self._rank = rank
@@ -35,7 +36,7 @@ class SampleLoader:
       net_type='socket'
     )
     self._batch_num = 0
-    self._barrier_interval = 100
+    self._barrier_interval = barrier_interval
     self._sampler_iter = None
 
 
@@ -54,6 +55,7 @@ class SampleLoader:
       self._batch_num = 0
       raise StopIteration
     self._batch_num += 1
+    #if self._batch_num % self._barrier_interval == 0:
     if self._batch_num % self._barrier_interval == 0:
       self._barrier.barrier()
     return nf
@@ -80,6 +82,7 @@ class SampleDeliver:
     self._sender_port = 8760
     self._proc = None
     self._one2all = True
+    self._barrier_interval = barrier_interval
 
 
   def async_sample(self, epoch, batch_size, one2all=True):
@@ -89,20 +92,28 @@ class SampleDeliver:
                               args=(epoch, batch_size))
       self._proc.start()
     else:
-      chunk_size = int(self._train_nid.shape[0] / self._trainer_num) - 1
-      self._proc = mp.Pool()
-      for rank in range(args.num_workers):
+      if not isinstance(self._train_nid, list):
+        chunk_size = int(self._train_nid.shape[0] / self._trainer_num) - 1
+      #self._proc = mp.Pool()
+      self._proc = []
+      for rank in range(self._trainer_num):
         print('starting child sampler process {}'.format(rank))
-        sampler_nid = self._train_nid[chunk_size * rank:chunk_size * (rank + 1)]
-        self._proc.apply_async(self.one2one_sampler,
-                               args=(epoch, batch_size, sampler_nid, rank))
-
+        if isinstance(self._train_nid, list):
+          sampler_nid = self._train_nid[rank]
+        else:
+          sampler_nid = self._train_nid[chunk_size * rank:chunk_size * (rank + 1)]
+        #self._proc.apply_async(self.one2one_sample,
+        #                       args=(epoch, batch_size, sampler_nid, rank))
+        proc = mp.Process(target=self.one2one_sample,
+                          args=(epoch, batch_size, sampler_nid, rank))
+        proc.start()
+        self._proc.append(proc)
 
   def one2all_sample(self, epoch_num, batch_size):
     # waiting trainers connecting
     barrier = SampleBarrier('server', trainer_num=self._trainer_num)
 
-    namebook = {tid: '127.0.0.1:' + str(self._sender_port+tid)\
+    namebook = {tid: '127.0.0.1:' + str(self._sender_port + tid)\
                         for tid in range(self._trainer_num)}
     sampler = dgl.contrib.sampling.NeighborSampler(
                 self._graph, batch_size,
@@ -121,7 +132,8 @@ class SampleDeliver:
         tid += 1
         if tid % self._trainer_num == 0:
           idx += 1
-          if idx % 100 == 0:
+          #print('sent batch ', idx)
+          if idx % self._barrier_interval == 0:
             barrier.barrier()
       # temporary solution: makeup the unbalanced pieces
       print('Epoch {} end. Next tid: {}'.format(epoch+1, tid % self._trainer_num))
@@ -138,26 +150,26 @@ class SampleDeliver:
   def one2one_sample(self, epoch_num, batch_size, train_nid, rank):
     # waiting trainers connecting
     barrier = SampleBarrier('server', rank=rank)
-    num_hops = args.gnn_layers - 1 if args.preprocess else args.gnn_layers
-    namebook = {0: '127.0.0.1:'+str(start_port+rank)}
+    namebook = {0: '127.0.0.1:'+ str(self._sender_port + rank)}
     sender = dgl.contrib.sampling.SamplerSender(namebook, net_type='socket')
+    graph = self._graph[rank] if isinstance(self._graph, list) else self._graph
     sampler = dgl.contrib.sampling.NeighborSampler(
-                self._graph, batch_size,
-                self._neighbor_num, neighbor_type='in',
-                shuffle=True, num_workers=4,
-                num_hops=self._hops, seed_nodes=train_nid,
-                prefetch=True, add_self_loop=False
+      graph, batch_size,
+      self._neighbor_num, neighbor_type='in',
+      shuffle=True, num_workers=4,
+      num_hops=self._hops, seed_nodes=train_nid,
+      prefetch=True, add_self_loop=False
     )
     for epoch in range(epoch_num):
       idx = 0
       for nf in sampler:
         sender.send(nf, 0)
         idx += 1
-        if idx % 100 == 0:
-          barrier.barrier('server')
+        if idx % self._barrier_interval == 0:
+          barrier.barrier()
       sender.signal(0)
       # barrier
-      barrier.barrier('server')
+      barrier.barrier()
       
 
   def __del__(self):
@@ -185,6 +197,7 @@ class SampleBarrier:
     self._port = 8200 + rank
     self._role = role
     if self._role == 'server':
+      print('start listening at: ' + self._ip + ' : ' + str(self._port))
       self._server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
       self._server_sock.bind((self._ip, self._port))
       self._server_sock.listen(8)
@@ -196,6 +209,7 @@ class SampleBarrier:
         self._socks.append(clientsocket)
         trainer_num -= 1
     elif self._role == 'trainer':
+      print('[{}]: try connecting server at: '.format(rank) + self._ip + ' : ' + str(self._port))
       self._socks = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
       self._socks.connect((self._ip, self._port))
       self._socks.setblocking(0) # to non-blocking
