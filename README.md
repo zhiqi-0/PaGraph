@@ -60,7 +60,7 @@ $ python
 * DGL+Cache Store Server:
 
   ```bash
-  $ python server/cache_server.py --datset xxx/datasetfolder --num-workers [gpu-num] [--preprocess] [--sample]
+  $ python server/cache_server.py --dataset xxx/datasetfolder --num-workers [gpu-num] [--preprocess] [--sample]
   ```
 
 For more instructions, checkout server launch files.
