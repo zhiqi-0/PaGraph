@@ -1,12 +1,12 @@
 import os
 import sys
 # set environment
-module_name ='PaGraph'
-modpath = os.path.abspath('.')
-if module_name in modpath:
-  idx = modpath.find(module_name)
-  modpath = modpath[:idx]
-sys.path.append(modpath)
+# module_name ='PaGraph'
+# modpath = os.path.abspath('.')
+# if module_name in modpath:
+#   idx = modpath.find(module_name)
+#   modpath = modpath[:idx]
+# sys.path.append(modpath)
 
 import argparse, time
 import torch
