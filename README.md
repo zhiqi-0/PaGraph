@@ -52,7 +52,7 @@ $ python
 * PaGraph Store Server:
 
   ```bash
-  $ python server/pa_server.py --dataset xxx/datasetfolder --num-workers [gpu-num] [--preprocess] [-sample]
+  $ python server/pa_server.py --dataset xxx/datasetfolder --num-workers [gpu-num] [--preprocess] [--sample]
   ```
 
   Note `--sample` is for enabling remote sampling.
