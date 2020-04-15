@@ -149,9 +149,9 @@ if __name__ == '__main__':
   # training hyper-params
   parser.add_argument("--lr", type=float, default=1e-2,
                       help="learning rate")
-  parser.add_argument("--n-epochs", type=int, default=60,
+  parser.add_argument("--n-epochs", type=int, default=10,
                       help="number of training epochs")
-  parser.add_argument("--batch-size", type=int, default=2500,
+  parser.add_argument("--batch-size", type=int, default=6000,
                       help="batch size")
   parser.add_argument("--weight-decay", type=float, default=0,
                       help="Weight for L2 loss")

@@ -36,7 +36,7 @@ def gnneval(args, infer_model, train_model, graph, labels, rank, test_nid):
                                                  seed_nodes=test_nid):
     nf.copy_from_parent(ctx=ctx)
   
-  for ckpt in range(2,50,2):
+  for ckpt in range(5,60,5):
     train_model = torch.load(
       os.path.join(args.ckpt, args.arch + '_' + str(ckpt))
     )
@@ -47,6 +47,7 @@ def gnneval(args, infer_model, train_model, graph, labels, rank, test_nid):
     num_acc = 0.
     infer_model.eval()
     with torch.no_grad():
+      nf.copy_from_parent(ctx=ctx)
       pred = infer_model(nf)
       batch_nids = nf.layer_parent_nid(-1)
       batch_labels = labels[batch_nids].cuda(rank)
@@ -77,6 +78,19 @@ def main(args):
                            args.n_layers,
                            F.relu,
                            args.preprocess)
+  elif args.arch == 'gs-nssc':
+    from PaGraph.model.pytorch.graphsage_nssc import GraphSageSampling
+    train_model = torch.load(
+      os.path.join(args.ckpt, args.arch + '_' + str(args.epoch))
+    )
+    infer_model = GraphSageSampling(args.feat_size,
+                            args.n_hidden,
+                            n_classes,
+                            args.n_layers,
+                            F.relu,
+                            0,
+                            'mean',
+                            args.preprocess)
   else:
     print('Unknown arch')
     sys.exit(-1)
@@ -94,7 +108,7 @@ if __name__ == '__main__':
   parser.add_argument("--arch", type=str, default='gcn-nssc',
                       help='model arch')
   # model arch
-  parser.add_argument("--feat-size", type=int, default=300,
+  parser.add_argument("--feat-size", type=int, default=602,
                       help='input feature size')
   parser.add_argument("--n-hidden", type=int, default=32,
                       help="number of hidden gcn units")
