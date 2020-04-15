@@ -1,16 +1,14 @@
 # PaGraph
 
-Graph Neural Network Framework on Large Scaled Graph Dataset with Multi-GPUs training, partitioning and caching.
+Scaling GNN Training on Large Graphs via Computation-aware Caching and Partitioning. Build based on DGL with PyTorch backend.
 
 ## Prerequisite
 
 * Python 3
 
-* PyTorch v >= 1.3
+* PyTorch (v >= 1.3)
 
-* DGL v == 0.4.1
-
-* numba (conda install numba)
+* DGL (v == 0.4.1)
 
 ## Prepare Dataset
 
@@ -34,7 +32,7 @@ Graph Neural Network Framework on Large Scaled Graph Dataset with Multi-GPUs tra
 * Generating partitions (naive partition):
 
   ```bash
-  $ python partition/partition.py --num-hop 1 --dataset xxx/datasetfolder
+  $ python partition/fastbuilding_old.py --num-hops 1 --partition 2 --dataset xxx/datasetfolder
 
   ```
 
@@ -51,23 +49,21 @@ $ python
 
 ### Launch Graph Server
 
-* PyTorch
+* PaGraph Store Server:
 
-  * PaGraph Store Server:
+  ```bash
+  $ python server/pa_server.py --dataset xxx/datasetfolder --num-workers [gpu-num] [--preprocess] [-sample]
+  ```
 
-    ```bash
-    $ python server/pa_server.py --dataset xxx/datasetfolder --num-workers [gpu-num] [--preprocess] [-sample]
-    ```
+  Note `--sample` is for enabling remote sampling.
 
-    Note `--sample` is for enabling remote sampling.
+* DGL+Cache Store Server:
 
-  * DGL+Cache Store Server:
+  ```bash
+  $ python server/cache_server.py --datset xxx/datasetfolder --num-workers [gpu-num] [--preprocess] [--sample]
+  ```
 
-    ```bash
-    $ python server/cache_server.py --datset xxx/datasetfolder --num-workers [gpu-num] [--preprocess] [--sample]
-    ```
-  
-  For more instructions, checkout server launch files.
+For more instructions, checkout server launch files.
 
 
 ### Run Trainer
@@ -96,7 +92,7 @@ $ python
     $ python prof/profile/pa_iso.py --dataset xxx/datasetfolder --gpu [gpu indices, splitted by ','] [--preprocess]
     ```
   
-  Note: multi-gpus training require `OMP_NUM_THREADS` settings, or it will show low scalability.
+Note: multi-gpus training require `OMP_NUM_THREADS` settings, or it will show low scalability.
 
 ### Profiling with NVProf
 
