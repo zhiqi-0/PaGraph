@@ -60,13 +60,13 @@ if __name__ == '__main__':
   parser = argparse.ArgumentParser(description='GCN')
   register_data_args(parser)
   parser.add_argument("--graph-file", type=str, default="",
-          help="graph file")
-  parser.add_argument("--num-feats", type=int, default=100,
-          help="the number of features")
+    help="graph file")
+  parser.add_argument("--num-feats", type=int, default=600,
+    help="the number of features")
   parser.add_argument("--self-loop", action='store_true',
-          help="graph self-loop (default=False)")
+    help="graph self-loop (default=False)")
   parser.add_argument("--num-workers", type=int, default=1,
-          help="the number of workers")
+    help="the number of workers")
   args = parser.parse_args()
   
   main(args)
