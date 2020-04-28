@@ -9,7 +9,7 @@ import torch.nn.functional as F
 import numpy as np
 import dgl
 
-from PaGraph.model.pytorch.gcn_nssc import GCNSampling, GCNInfer
+from PaGraph.model.gcn_nssc import GCNSampling
 import PaGraph.data as data
 from PaGraph.parallel import SampleLoader
 

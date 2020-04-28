@@ -10,7 +10,7 @@ import numpy as np
 import dgl
 from dgl import DGLGraph
 
-from PaGraph.model.pytorch.gcn_nssc import GCNSampling, GCNInfer
+from PaGraph.model.gcn_nssc import GCNSampling, GCNInfer
 import PaGraph.data as data
 import PaGraph.storage as storage
 from PaGraph.parallel import SampleLoader

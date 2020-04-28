@@ -10,9 +10,10 @@ import numpy as np
 import dgl
 from dgl import DGLGraph
 
-from PaGraph.model.pytorch.gcn_nssc import GCNSampling, GCNInfer
+from PaGraph.model.graphsage_nssc import GraphSageSampling
 import PaGraph.data as data
 import PaGraph.storage as storage
+from PaGraph.parallel import SampleLoader
 
 def init_process(rank, world_size, backend):
   os.environ['MASTER_ADDR'] = '127.0.0.1'
@@ -42,42 +43,41 @@ def trainer(rank, world_size, args, backend='nccl'):
   # to torch tensor
   t2fid = torch.LongTensor(t2fid)
   labels = torch.LongTensor(labels)
-  embed_names = ['features', 'norm']
+  if args.preprocess:
+    embed_names = ['features', 'neigh']
+  else:
+    embed_names = ['features']
   cacher = storage.GraphCacheServer(remote_g, adj.shape[0], t2fid, rank)
   cacher.init_field(embed_names)
   cacher.log = False
 
   # prepare model
   num_hops = args.n_layers if args.preprocess else args.n_layers + 1
-  model = GCNSampling(args.feat_size,
-                      args.n_hidden,
-                      n_classes,
-                      args.n_layers,
-                      F.relu,
-                      args.dropout,
-                      args.preprocess)
-  infer_model = GCNInfer(args.feat_size,
-                         args.n_hidden,
-                         n_classes,
-                         args.n_layers,
-                         F.relu)
+  model = GraphSageSampling(args.feat_size,
+                            args.n_hidden,
+                            n_classes,
+                            args.n_layers,
+                            F.relu,
+                            args.dropout,
+                            'mean',
+                            args.preprocess)
   loss_fcn = torch.nn.CrossEntropyLoss()
   optimizer = torch.optim.Adam(model.parameters(),
                                lr=args.lr,
                                weight_decay=args.weight_decay)
   model.cuda(rank)
-  infer_model.cuda(rank)
   model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[rank])
   ctx = torch.device(rank)
 
-  sampler = dgl.contrib.sampling.NeighborSampler(g, args.batch_size,
-                                                    args.num_neighbors,
-                                                    neighbor_type='in',
-                                                    shuffle=True,
-                                                    num_workers=args.num_workers,
-                                                    num_hops=num_hops,
-                                                    seed_nodes=train_nid,
-                                                    prefetch=True)
+  if args.remote_sample:
+    sampler = SampleLoader(g, rank, one2all=False)
+  else:
+    sampler = dgl.contrib.sampling.NeighborSampler(g, args.batch_size,
+      args.num_neighbors, neighbor_type='in',
+      shuffle=True, num_workers=args.num_workers,
+      num_hops=num_hops, seed_nodes=train_nid,
+      prefetch=True
+    )
 
   # start training
   epoch_dur = []
@@ -131,14 +131,14 @@ if __name__ == '__main__':
   parser.add_argument("--n-classes", type=int, default=60)
   parser.add_argument("--dropout", type=float, default=0.2,
                       help="dropout probability")
-  parser.add_argument("--n-hidden", type=int, default=32,
+  parser.add_argument("--n-hidden", type=int, default=16,
                       help="number of hidden gcn units")
   parser.add_argument("--n-layers", type=int, default=1,
                       help="number of hidden gcn layers")
   parser.add_argument("--preprocess", dest='preprocess', action='store_true')
   parser.set_defaults(preprocess=False)
   # training hyper-params
-  parser.add_argument("--lr", type=float, default=3e-2,
+  parser.add_argument("--lr", type=float, default=1e-2,
                       help="learning rate")
   parser.add_argument("--n-epochs", type=int, default=10,
                       help="number of training epochs")
@@ -150,7 +150,9 @@ if __name__ == '__main__':
   parser.add_argument("--num-neighbors", type=int, default=2,
                       help="number of neighbors to be sampled")
   parser.add_argument("--num-workers", type=int, default=16)
-  
+  parser.add_argument("--remote-sample", dest='remote_sample', action='store_true')
+  parser.set_defaults(remote_sample=False)
+
   args = parser.parse_args()
 
   os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu

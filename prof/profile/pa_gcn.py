@@ -1,13 +1,5 @@
 import os
 import sys
-# set environment
-# module_name ='PaGraph'
-# modpath = os.path.abspath('.')
-# if module_name in modpath:
-#   idx = modpath.find(module_name)
-#   modpath = modpath[:idx]
-# sys.path.append(modpath)
-
 import argparse, time
 import torch
 import torch.nn as nn
@@ -16,6 +8,7 @@ import torch.multiprocessing as mp
 import torch.nn.functional as F
 import numpy as np
 import dgl
+from dgl import DGLGraph
 
 from PaGraph.model.gcn_nssc import GCNSampling
 import PaGraph.data as data
@@ -26,9 +19,10 @@ def init_process(rank, world_size, backend):
   os.environ['MASTER_ADDR'] = '127.0.0.1'
   os.environ['MASTER_PORT'] = '29501'
   dist.init_process_group(backend, rank=rank, world_size=world_size)
-  #torch.cuda.set_device(rank)
+  torch.cuda.set_device(rank)
   torch.manual_seed(rank)
   print('rank [{}] process successfully launches'.format(rank))
+
 
 def trainer(rank, world_size, args, backend='nccl'):
   # init multi process
@@ -36,30 +30,26 @@ def trainer(rank, world_size, args, backend='nccl'):
   
   # load data
   dataname = os.path.basename(args.dataset)
-  g = dgl.contrib.graph_store.create_graph_from_store(dataname, "shared_mem")
-  labels = data.get_labels(args.dataset)
-  n_classes = args.n_classes
-  # masks for semi-supervised learning
-  train_mask, val_mask, test_mask = data.get_masks(args.dataset)
-  train_nid = np.nonzero(train_mask)[0].astype(np.int64)
-  chunk_size = int(train_nid.shape[0] / world_size) - 1
-  train_nid = train_nid[chunk_size * rank:chunk_size * (rank + 1)]
-  test_nid = np.nonzero(test_mask)[0].astype(np.int64)
-  # to torch tensor
-  labels = torch.LongTensor(labels)
-  train_mask = torch.ByteTensor(train_mask)
-  val_mask = torch.ByteTensor(val_mask)
-  test_mask = torch.ByteTensor(test_mask)
+  remote_g = dgl.contrib.graph_store.create_graph_from_store(dataname, "shared_mem")
 
-  # cacher
+  adj, t2fid = data.get_sub_train_graph(args.dataset, rank, world_size)
+  g = DGLGraph(adj, readonly=True)
+  n_classes = args.n_classes
+  train_nid = data.get_sub_train_nid(args.dataset, rank, world_size)
+  sub_labels = data.get_sub_train_labels(args.dataset, rank, world_size)
+  labels = np.zeros(np.max(train_nid) + 1, dtype=np.int)
+  labels[train_nid] = sub_labels
+
+  # to torch tensor
+  t2fid = torch.LongTensor(t2fid)
+  labels = torch.LongTensor(labels)
   embed_names = ['features', 'norm']
-  vnum = train_mask.size(0)
-  maps = torch.arange(vnum)
-  cacher = storage.GraphCacheServer(g, vnum, maps, rank)
+  cacher = storage.GraphCacheServer(remote_g, adj.shape[0], t2fid, rank)
   cacher.init_field(embed_names)
   cacher.log = False
 
   # prepare model
+  num_hops = args.n_layers if args.preprocess else args.n_layers + 1
   model = GCNSampling(args.feat_size,
                       args.n_hidden,
                       n_classes,
@@ -73,17 +63,17 @@ def trainer(rank, world_size, args, backend='nccl'):
                                weight_decay=args.weight_decay)
   model.cuda(rank)
   model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[rank])
+  ctx = torch.device(rank)
 
-  # sampler
-  num_hops = args.n_layers if args.preprocess else args.n_layers + 1
   if args.remote_sample:
     sampler = SampleLoader(g, rank, one2all=False)
   else:
-    sampler = dgl.contrib.sampling.NeighborSampler(
-      g, args.batch_size,
+    sampler = dgl.contrib.sampling.NeighborSampler(g, args.batch_size,
       args.num_neighbors, neighbor_type='in',
-      shuffle=True, num_workers=16, num_hops=num_hops,
-      seed_nodes=train_nid, prefetch=True)
+      shuffle=True, num_workers=args.num_workers,
+      num_hops=num_hops, seed_nodes=train_nid,
+      prefetch=True
+    )
 
   # start training
   epoch_dur = []
@@ -123,6 +113,7 @@ def trainer(rank, world_size, args, backend='nccl'):
   print('Total Time: {:.4f}s'.format(toc - tic))
 
 
+
 if __name__ == '__main__':
   parser = argparse.ArgumentParser(description='GCN')
 
@@ -154,9 +145,9 @@ if __name__ == '__main__':
   # sampling hyper-params
   parser.add_argument("--num-neighbors", type=int, default=2,
                       help="number of neighbors to be sampled")
+  parser.add_argument("--num-workers", type=int, default=16)
   parser.add_argument("--remote-sample", dest='remote_sample', action='store_true')
   parser.set_defaults(remote_sample=False)
-  
   
   args = parser.parse_args()
 
