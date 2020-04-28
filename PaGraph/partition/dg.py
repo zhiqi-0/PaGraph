@@ -7,8 +7,9 @@ import numpy as np
 import scipy.sparse as spsp
 import argparse
 import PaGraph.data as data
-import ordering
 
+import ordering
+from fastbuilding_old import get_sub_graph
 
 def in_neighbors(csc_adj, nid):
   return csc_adj.indices[csc_adj.indptr[nid]: csc_adj.indptr[nid+1]]
@@ -20,7 +21,9 @@ def in_neighbors_hop(csc_adj, nid, hops):
   else:
     nids = []
     for depth in range(hops):
-      nids.append(in_neighbors(csc_adj, nid))
+      neighs = nids[-1] if len(nids) != 0 else [nid]
+      for n in neighs:
+        nids.append(in_neighbors(csc_adj, n))
     return np.unique(np.hstack(nids))
 
 
@@ -53,7 +56,7 @@ def dg_ind(adj, neighbors, belongs, p_vnum, r_vnum, pnum):
   return score
 
 
-def dg(partition_num, adj, train_nids):
+def dg(partition_num, adj, train_nids, hops):
   csc_adj = adj.tocsc()
   vnum = adj.shape[0]
   vtrain_num = train_nids.shape[0]
@@ -66,7 +69,8 @@ def dg(partition_num, adj, train_nids):
   #for nid in range(0, train_nids):
   print('total vertices: {} | train vertices: {}'.format(vnum, vtrain_num))
   for step, nid in enumerate(train_nids):  
-    neighbors = in_neighbors(csc_adj, nid)
+    #neighbors = in_neighbors(csc_adj, nid)
+    neighbors = in_neighbors_hop(csc_adj, nid, hops)
     score = dg_ind(csc_adj, neighbors, belongs, p_vnum, r_vnum, partition_num)
     ind = dg_max_score(score, p_vnum)
     if belongs[nid] == -1:
@@ -128,20 +132,36 @@ if __name__ == '__main__':
   train_mask, val_mask, test_mask = data.get_masks(args.dataset)
   train_nids = np.nonzero(train_mask)[0].astype(np.int64)
   labels = data.get_labels(args.dataset)
+  
   # ordering
   if args.ordering:
     print('re-ordering graphs...')
     adj = adj.tocsc()
     adj, vmap = ordering.reordering(adj, depth=args.num_hop) # vmap: orig -> new
+    # save to files
+    mapv = np.zeros(vmap.shape, dtype=np.int64)
+    mapv[vmap] = np.arange(vmap.shape[0]) # mapv: new -> orig
     train_nids = np.sort(vmap[train_nids])
+    spsp.save_npz(os.path.join(args.dataset, 'adj.npz'), adj)
+    np.save(os.path.join(args.dataset, 'labels.npy'), labels[mapv])
+    np.save(os.path.join(args.dataset, 'train.npy'), train_mask[mapv])
+    np.save(os.path.join(args.dataset, 'val.npy'), val_mask[mapv])
+    np.save(os.path.join(args.dataset, 'test.npy'), test_mask[mapv])
+  
   # partition
-  p_v, p_trainv = dg(args.partition, adj, train_nids)
+  p_v, p_trainv = dg(args.partition, adj, train_nids, args.num_hop)
   
   # save to file
   partition_dataset = os.path.join(args.dataset, '{}naive'.format(args.partition))
+  try:
+    os.mkdir(partition_dataset)
+  except FileExistsError:
+    pass
+  dgl_g = dgl.DGLGraph(adj, readonly=True)
   for pid, (pv, ptrainv) in enumerate(zip(p_v, p_trainv)):
-    print('genering subgraph# {}'.format(pid))
-    subadj, sub2fullid, subtrainid = node2graph(adj, pv, ptrainv)
+    print('generating subgraph# {}...'.format(pid))
+    #subadj, sub2fullid, subtrainid = node2graph(adj, pv, ptrainv)
+    subadj, sub2fullid, subtrainid = get_sub_graph(dgl_g, ptrainv, args.num_hop)
     sublabel = labels[sub2fullid[subtrainid]]
     # files
     subadj_file = os.path.join(
