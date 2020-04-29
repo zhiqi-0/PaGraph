@@ -9,7 +9,7 @@ import argparse
 import PaGraph.data as data
 
 import ordering
-from fastbuilding_old import get_sub_graph
+from utils import get_sub_graph
 
 def in_neighbors(csc_adj, nid):
   return csc_adj.indices[csc_adj.indptr[nid]: csc_adj.indptr[nid+1]]
@@ -103,17 +103,6 @@ def dg(partition_num, adj, train_nids, hops):
   return sub_v, sub_trainv
 
 
-def node2graph(fulladj, nodelist, train_nids):
-  g = dgl.DGLGraph(fulladj)
-  subg = g.subgraph(nodelist)
-  sub2full = subg.parent_nid.numpy()
-  subadj = subg.adjacency_matrix_scipy(transpose=True, return_edge_ids=False)
-  # get train vertices under subgraph scope
-  subtrain = subg.map_to_subgraph_nid(train_nids).numpy()
-  return subadj, sub2full, subtrain
-
-
-
 
 if __name__ == '__main__':
   parser = argparse.ArgumentParser(description='Partition')
@@ -121,7 +110,7 @@ if __name__ == '__main__':
                       help="dataset dir")
   parser.add_argument("--partition", type=int, default=2,
                       help="num of partitions")
-  parser.add_argument("--num-hop", type=int, default=1,
+  parser.add_argument("--num-hops", type=int, default=1,
                       help="num of hop neighbors required for a batch")
   parser.add_argument("--ordering", dest='ordering', action='store_true')
   parser.set_defaults(ordering=False)

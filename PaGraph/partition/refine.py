@@ -5,6 +5,23 @@ import networkx as nx
 
 from utils import *
 
+def get_num_hop_in_neighbors(coo_adj, node_ids, num_hop, excluded_nodes=None):
+  """
+  Get num-hop neighbor idx for the given graph `coo_adj` and `node_ids`
+  Return:
+    nodes: list of nd arrays, [1-hop neighbors, 2-hop neighbors, ...]
+  """
+  select_mask = np.vectorize(exclude, excluded=['node_range'])
+
+  neighbors = []
+  for _ in range(num_hop):
+    node_ids = get_in_neighbors(coo_adj, node_ids)
+    neighbors.append(node_ids)
+    if excluded_nodes is not None:
+      mask = select_mask(nid=neighbors[-1], node_range=excluded_nodes)
+      neighbors[-1] = neighbors[-1][mask]
+  return neighbors
+
 
 def build_train_graph(coo_adj, train_nids, num_hop):
   """
