@@ -55,9 +55,9 @@ if __name__ == '__main__':
   parser.add_argument("--preprocess", dest='preprocess', action='store_true')
   parser.set_defaults(preprocess=False)
   # training hyper-params
-  parser.add_argument("--n-epochs", type=int, default=60,
+  parser.add_argument("--n-epochs", type=int, default=10,
                       help="number of training epochs")
-  parser.add_argument("--batch-size", type=int, default=2500,
+  parser.add_argument("--batch-size", type=int, default=6000,
                       help="batch size")
   # sampling hyper-params
   parser.add_argument("--num-neighbors", type=int, default=2,
