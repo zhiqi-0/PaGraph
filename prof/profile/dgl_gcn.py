@@ -11,6 +11,7 @@ import dgl
 
 from PaGraph.model.gcn_nssc import GCNSampling
 import PaGraph.data as data
+from PaGraph.parallel import SampleLoader
 
 def init_process(rank, world_size, backend):
   os.environ['MASTER_ADDR'] = '127.0.0.1'
@@ -60,14 +61,17 @@ def trainer(rank, world_size, args, backend='nccl'):
 
   # start training
   epoch_dur = []
-  sampler = dgl.contrib.sampling.NeighborSampler(g, args.batch_size,
-                                                    args.num_neighbors,
-                                                    neighbor_type='in',
-                                                    shuffle=True,
-                                                    num_workers=args.num_workers,
-                                                    num_hops=num_hops,
-                                                    seed_nodes=train_nid,
-                                                    prefetch=True)
+  if args.remote_sample:
+    sampler = SampleLoader(g, rank, one2all=False)
+  else:
+    sampler = dgl.contrib.sampling.NeighborSampler(g, args.batch_size,
+                                                   args.num_neighbors,
+                                                   neighbor_type='in',
+                                                   shuffle=True,
+                                                   num_workers=args.num_workers,
+                                                   num_hops=num_hops,
+                                                   seed_nodes=train_nid,
+                                                   prefetch=True)
   profile_begin = time.time()
   with torch.autograd.profiler.profile(enabled=(rank==0), use_cuda=True) as prof:
     for epoch in range(args.n_epochs):
@@ -128,6 +132,9 @@ if __name__ == '__main__':
   parser.add_argument("--num-neighbors", type=int, default=2,
                       help="number of neighbors to be sampled")
   parser.add_argument("--num-workers", type=int, default=16)
+  parser.add_argument("--remote-sample", dest='remote_sample', action='store_true')
+  parser.set_defaults(remote_sample=False)
+
 
   args = parser.parse_args()
 
