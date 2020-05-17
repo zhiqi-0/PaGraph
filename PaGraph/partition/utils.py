@@ -37,16 +37,19 @@ def get_sub_graph(dgl_g, train_nid, num_hops):
   sub_dsts = full2sub[full_dsts]
   vnum = len(sub2full)
   enum = len(sub_srcs)
-  print('vertex#: {} edge#: {}'.format(vnum, enum))
   data = np.ones(sub_srcs.shape[0], dtype=np.uint8)
   coo_adj = spsp.coo_matrix((data, (sub_srcs, sub_dsts)), shape=(vnum, vnum))
+  csr_adj = coo_adj.tocsr() # remove redundant edges
+  enum = csr_adj.data.shape[0]
+  csr_adj.data = np.ones(enum, dtype=np.uint8)
+  print('vertex#: {} edge#: {}'.format(vnum, enum))
   # train nid
   tnid = nf.layer_parent_nid(-1).numpy()
   valid_t_max = np.max(sub2full)
   valid_t_min = np.min(tnid)
   tnid = np.where(tnid <= valid_t_max, tnid, valid_t_min)
   subtrainid = full2sub[np.unique(tnid)]
-  return coo_adj, sub2full, subtrainid
+  return csr_adj, sub2full, subtrainid
 
 
 def node2graph(fulladj, nodelist, train_nids):
