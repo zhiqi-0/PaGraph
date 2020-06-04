@@ -50,14 +50,13 @@ Scaling GNN Training on Large Graphs via Computation-aware Caching and Partition
   * For hash partition:
     
     ```bash
-    $ python PaGraph/partition/hash.py --num-hops 1   --partition 2 --dataset xxx/datasetfolder
+    $ python PaGraph/partition/hash.py --num-hops 1 --partition 2 --dataset xxx/datasetfolder
     ```
 
   * For dg-based partition:
 
     ```bash
-    $ python PaGraph/partition/dg.py --num-hops 1
-    --partition 2 --dataset xxx/datasetfolder
+    $ python PaGraph/partition/dg.py --num-hops 1 --partition 2 --dataset xxx/datasetfolder
     ```
 
 ## Run
