@@ -12,15 +12,15 @@ Scaling GNN Training on Large Graphs via Computation-aware Caching and Partition
 
 ## Prepare Dataset
 
-* Dataset Format:
+* Dataset Format (`vnum` denotes vertex number):
 
   * `adj.npz`: graph adjacancy matrix with `(vnum, vnum)` shape. Saved in `scipy.sparse` coo matrix format.
 
-  * `labels.npy`: vertex label with `(vnum,)`. Saved in `numpy.array` format.
+  * `labels.npy`: vertex label with `(vnum,)` shape. Saved in `numpy.array` format.
 
-  * `test.npy`, `train.npy`, `val.npy`: boolean array with `(vnum, )` shape. Saved in `numpy.array`. Each element indicates whether the vertex is a train/test/val vertex.
+  * `test.npy`, `train.npy`, `val.npy`: boolean array with `(vnum,)` shape. Saved as `numpy.array`. Each element indicates whether the vertex is a train/test/val vertex.
 
-  * (Optional) `feat.npy`: feature of vertex with `(vnum, feat-size)` shape. Saved in `numpy.array`. If not provided, will be randomly initialized (feat size is defaultly set to 600, can be changed in `Pagraph/data/get_data` line 27). 
+  * (Optional) `feat.npy`: feature of vertex with `(vnum, feat-size)` shape. Saved as `numpy.array`. If not provided, will be randomly initialized (feat size is defaultly set to 600, can be changed in `Pagraph/data/get_data` line 27). 
 
 * Convert dataset from DGL:
 
