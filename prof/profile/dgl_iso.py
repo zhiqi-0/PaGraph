@@ -51,11 +51,6 @@ def trainer(rank, world_size, args, backend='nccl'):
                       F.relu,
                       args.dropout,
                       args.preprocess)
-  infer_model = GCNInfer(args.feat_size,
-                         args.n_hidden,
-                         n_classes,
-                         args.n_layers,
-                         F.relu)
   loss_fcn = torch.nn.CrossEntropyLoss()
   optimizer = torch.optim.Adam(model.parameters(),
                                lr=args.lr,

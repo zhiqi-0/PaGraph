@@ -12,6 +12,22 @@ Scaling GNN Training on Large Graphs via Computation-aware Caching and Partition
 
 ## Prepare Dataset
 
+* Dataset Format:
+
+  * `adj.npz`: graph adjacancy matrix with `(vnum, vnum)` shape. Saved in `scipy.sparse` coo matrix format.
+
+  * `labels.npy`: vertex label with `(vnum,)`. Saved in `numpy.array` format.
+
+  * `test.npy`, `train.npy`, `val.npy`: boolean array with `(vnum, )` shape. Saved in `numpy.array`. Each element indicates whether the vertex is a train/test/val vertex.
+
+  * (Optional) `feat.npy`: feature of vertex with `(vnum, feat-size)` shape. Saved in `numpy.array`. If not provided, will be randomly initialized (feat size is defaultly set to 600, can be changed in `Pagraph/data/get_data` line 27). 
+
+* Convert dataset from DGL:
+
+  ```bash
+  $ python PaGraph/data/dgl2pagraph.py --dataset reddit --self-loop --out-dir /folders/to/save
+  ```
+
 * For randomly generated dataset:
 
   * Use [PaRMAT](https://github.com/farkhor/PaRMAT) to generate a graph:
@@ -31,10 +47,18 @@ Scaling GNN Training on Large Graphs via Computation-aware Caching and Partition
 
 * Generating partitions (naive partition):
 
-  ```bash
-  $ python partition/fastbuilding_old.py --num-hops 1 --partition 2 --dataset xxx/datasetfolder
+  * For hash partition:
+    
+    ```bash
+    $ python PaGraph/partition/hash.py --num-hops 1   --partition 2 --dataset xxx/datasetfolder
+    ```
 
-  ```
+  * For dg-based partition:
+
+    ```bash
+    $ python PaGraph/partition/dg.py --num-hops 1
+    --partition 2 --dataset xxx/datasetfolder
+    ```
 
 ## Run
 
@@ -73,34 +97,35 @@ For more instructions, checkout server launch files.
   * DGL benchmark
 
     ```bash
-    $ python prof/profile/dgl_orig.py --dataset xxx/datasetfolder --gpu [gpu indices, splitted by ','] [--preprocess]
+    $ python prof/profile/dgl_gcn.py --dataset xxx/datasetfolder --gpu [gpu indices, splitted by ','] [--preprocess] [--remote-sample]
     ```
 
   * PaGraph
 
     ```bash
-    $ python prof/profile/pa.py --dataset xxx/datasetfolder --gpu [gpu indices, splitted by ','] [--preprocess]
+    $ python prof/profile/pa_gcn.py --dataset xxx/datasetfolder --gpu [gpu indices, splitted by ','] [--preprocess] [--remote-sample]
     ```
 
-  * Isolation
-
-    ```bash
-    $ python prof/profile/dgl_iso.py --dataset xxx/datasetfolder --gpu [gpu indices, splitted by ','] [--preprocess]
-    ```
-
-    ```bash
-    $ python prof/profile/pa_iso.py --dataset xxx/datasetfolder --gpu [gpu indices, splitted by ','] [--preprocess]
-    ```
+Note: `--remote-sample` is for enabling isolation. This should be cooperated with server command `--sample`.
   
 Note: multi-gpus training require `OMP_NUM_THREADS` settings, or it will show low scalability.
 
-### Profiling with NVProf
+### Reminder
 
-* multi-processes command line:
+Partition is aware of GNN model layers. Please guarantee the consistency of `--num-hops`, `--preprocess` when partitioning and training, respectively. Specifically, if `--preprocess` is enabled in both server and trainer, `--num-hops` should be the `Num of model-layer - 1`. Otherwise, keep `--num-hops` the same as number of GNN layers. In our settings, GCN and GraphSAGE has 2 layers.
+
+### Profiling
+
+* NVProf on multi-processes command line:
 
   ```bash
   $ nvprof --profile-all-processes --csv --log-file %pprof.csv
   ```
+
+* Pytorch Profiler:
+
+  Run script in `prof/` as mentioned above.
+
 
 ## License
 
