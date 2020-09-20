@@ -1,0 +1,4 @@
+*.pyc
+result/
+PaGraph.egg-info/
+scripts/

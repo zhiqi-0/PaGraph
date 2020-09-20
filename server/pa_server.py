@@ -13,7 +13,7 @@ import PaGraph.data as data
 from PaGraph.parallel import SampleDeliver
 
 def main(args):
-  coo_adj, feat = data.get_graph_data(args.dataset)
+  coo_adj, feat = data.get_graph_data(args.dataset, args.feat_size)
 
   graph = dgl.DGLGraph(coo_adj, readonly=True)
   features = torch.FloatTensor(feat)
@@ -88,6 +88,9 @@ if __name__ == '__main__':
   
   parser.add_argument("--num-workers", type=int, default=1,
                       help="the number of workers")
+
+  parser.add_argument("--feat-size", type=int, default=600,
+                      help="set the feature size")
   
   parser.add_argument("--model", type=str, default="gcn",
                       help="model type for preprocessing")

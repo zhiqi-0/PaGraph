@@ -5,7 +5,7 @@ import os
 import dgl
 
 
-def get_graph_data(dataname):
+def get_graph_data(dataname, feat_size=600):
   """
   Parames:
     dataname: shoud be a folder name, which contains
@@ -24,7 +24,8 @@ def get_graph_data(dataname):
   except FileNotFoundError:
     print('random generate feat...')
     import torch
-    feat = torch.rand((adj.shape[0], 600))
+    print("feature size at server:", feat_size)
+    feat = torch.rand((adj.shape[0], feat_size))
   
   return adj, feat
 
