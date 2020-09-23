@@ -1,4 +1,3 @@
 *.pyc
-result/
+trainResult/
 PaGraph.egg-info/
-scripts/
