@@ -16,7 +16,7 @@ import PaGraph.storage as storage
 from PaGraph.parallel import SampleLoader
 
 def init_process(rank, world_size, backend):
-  os.environ['MASTER_ADDR'] = '127.0.0.1'
+      os.environ['MASTER_ADDR'] = '127.0.0.1'
   os.environ['MASTER_PORT'] = '29501'
   dist.init_process_group(backend, rank=rank, world_size=world_size)
   torch.cuda.set_device(rank)
@@ -147,6 +147,8 @@ if __name__ == '__main__':
                       help="number of neighbors to be sampled")
   parser.add_argument("--num-workers", type=int, default=16)
   parser.add_argument("--remote-sample", dest='remote_sample', action='store_true')
+  parser.add_argument("--pre-fetch", action='store_true', 
+                      help='prefetch one iteration data or not')
   parser.set_defaults(remote_sample=False)
   
   args = parser.parse_args()

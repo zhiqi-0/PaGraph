@@ -31,6 +31,7 @@ def parseArgs():
     parser.add_argument('--preprocess',     action = 'store_true', help = 'preprocess or not')
     parser.add_argument('--remote-sample',  action = 'store_true', help = 'remote sampling or not')
     parser.add_argument('--scaling',        action = 'store_true', help = 'scaling evaluation')
+    parser.add_argument('--pre-fetch',        action = 'store_true', help = 'enable prefetch for PaGraph')
     parser.add_argument('--home',           type = str, default = '/home/gpu/PaGraph', help = 'PaGraph home')
     return parser.parse_args()
 
@@ -61,7 +62,7 @@ class trainingModel:
         os.system(cmd)
 
     def trainer_process(self):
-        cmd = '''%(setomp)s python %(home)s/prof/profile/%(frame)s_%(model)s.py --dataset %(datapath)s --gpu %(gpus)s --feat-size %(fsize)d %(prep)s %(rsample)s 2>&1 | tee -a %(path)s/%(output)s'''%(
+        cmd = '''%(setomp)s python -u %(home)s/prof/profile/%(frame)s_%(model)s.py --dataset %(datapath)s --gpu %(gpus)s --feat-size %(fsize)d %(prep)s %(rsample)s %(prefet)s 2>&1 | tee -a %(path)s/%(output)s'''%(
             {
                 'setomp': '' if self.args.frame == 'dgl' and not self.args.scaling else 'OMP_NUM_THREADS=%d'%(self.args.omp_thrs),
                 'home': self.args.home,
@@ -72,6 +73,7 @@ class trainingModel:
                 'fsize': datasets[self.args.dataset][1],
                 'prep': '--preprocess' if self.args.preprocess else '',
                 'rsample': '--remote-sample' if self.args.remote_sample else '',
+                'prefet': '--pre-fetch' if self.args.pre_fetch else '',
                 'path': self.path,
                 'output': self.out_filename
             }
