@@ -14,9 +14,10 @@ from PaGraph.model.gcn_nssc import GCNSampling
 import PaGraph.data as data
 import PaGraph.storage as storage
 from PaGraph.parallel import SampleLoader
+from PaGraph.parallel import PaGraphIterableDataset
 
 def init_process(rank, world_size, backend):
-      os.environ['MASTER_ADDR'] = '127.0.0.1'
+  os.environ['MASTER_ADDR'] = '127.0.0.1'
   os.environ['MASTER_PORT'] = '29501'
   dist.init_process_group(backend, rank=rank, world_size=world_size)
   torch.cuda.set_device(rank)
@@ -74,7 +75,8 @@ def trainer(rank, world_size, args, backend='nccl'):
       num_hops=num_hops, seed_nodes=train_nid,
       prefetch=True
     )
-
+  iterdataset = PaGraphIterableDataset(sampler)
+  itersampler = torch.utils.data.DataLoader(dataset=iterdataset, batch_size=1, num_workers=0, pin_memory=False)
   # start training
   epoch_dur = []
   tic = time.time()
@@ -83,24 +85,25 @@ def trainer(rank, world_size, args, backend='nccl'):
       model.train()
       epoch_start_time = time.time()
       step = 0
-      for nf in sampler:
-        with torch.autograd.profiler.record_function('gpu-load'):
-          cacher.fetch_data(nf)
-          batch_nids = nf.layer_parent_nid(-1)
-          label = labels[batch_nids]
-          label = label.cuda(rank, non_blocking=True)
-        with torch.autograd.profiler.record_function('gpu-compute'):
-          pred = model(nf)
-          loss = loss_fcn(pred, label)
-          optimizer.zero_grad()
-          loss.backward()
-          optimizer.step()
+      print("begin to iteration")
+      for nf in itersampler:
+        # with torch.autograd.profiler.record_function('gpu-load'):
+        #   cacher.fetch_data(nf)
+        #   batch_nids = nf.layer_parent_nid(-1)
+        #   label = labels[batch_nids]
+        #   label = label.cuda(rank, non_blocking=True)
+        # with torch.autograd.profiler.record_function('gpu-compute'):
+        #   pred = model(nf)
+        #   loss = loss_fcn(pred, label)
+        #   optimizer.zero_grad()
+        #   loss.backward()
+        #   optimizer.step()
         step += 1
         if epoch == 0 and step == 1:
           cacher.auto_cache(g, embed_names)
-        if rank == 0 and step % 20 == 0:
-          print('epoch [{}] step [{}]. Loss: {:.4f}'
-                .format(epoch + 1, step, loss.item()))
+        # if rank == 0 and step % 20 == 0:
+        #   print('epoch [{}] step [{}]. Loss: {:.4f}'
+        #         .format(epoch + 1, step, loss.item()))
       if rank == 0:
         epoch_dur.append(time.time() - epoch_start_time)
         print('Epoch average time: {:.4f}'.format(np.mean(np.array(epoch_dur[2:]))))
@@ -157,4 +160,3 @@ if __name__ == '__main__':
   gpu_num = len(args.gpu.split(','))
 
   mp.spawn(trainer, args=(gpu_num, args), nprocs=gpu_num, join=True)
-  

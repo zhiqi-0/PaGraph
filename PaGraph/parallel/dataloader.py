@@ -38,11 +38,10 @@ class SampleLoader:
     self._batch_num = 0
     self._barrier_interval = barrier_interval
     self._sampler_iter = None
+    self._recver_iter = iter(self._recver)
 
 
   def __iter__(self):
-    self._batch_num = 0
-    self._recver_iter = iter(self._recver)
     return self
 
   
@@ -63,6 +62,12 @@ class SampleLoader:
 
   def __del__(self):
     del self._recver
+
+class PaGraphIterableDataset(torch.utils.data.IterableDataset):
+  def __init__(self, itera):
+    self._itera = itera
+  def __iter__(self):
+    return self._itera 
   
 
 class SampleDeliver:
