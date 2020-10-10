@@ -20,10 +20,10 @@ class SampleLoader:
   """ SampleLoader
   sample load pipeline
   """
-  def __init__(self, graph, rank, one2all=True):
+  def __init__(self, graph, rank, one2all=True, barrier_port=8200, pre_fetch=False):
     # connect to server sampler:
     barrier_rank = 0 if one2all else rank
-    self._barrier = SampleBarrier('trainer', rank=barrier_rank)
+    self._barrier = SampleBarrier('trainer', rank=barrier_rank, port=barrier_port)
 
     self._graph = graph
     self._rank = rank
@@ -38,11 +38,14 @@ class SampleLoader:
     self._batch_num = 0
     self._barrier_interval = barrier_interval
     self._sampler_iter = None
-
+    self._prefetch = pre_fetch
+    if self._prefetch:
+      self._recver_iter = iter(self._recver)
 
   def __iter__(self):
     self._batch_num = 0
-    self._recver_iter = iter(self._recver)
+    if not self._prefetch:
+      self._recver_iter = iter(self._recver)
     return self
 
   
@@ -52,6 +55,8 @@ class SampleLoader:
     except StopIteration:
       # end of an epoch
       self._barrier.barrier()
+      if self._prefetch:
+        self._barrier._close()
       self._batch_num = 0
       raise StopIteration
     self._batch_num += 1
@@ -73,7 +78,8 @@ class SampleDeliver:
                train_nid,
                neighbor_num,
                hops,
-               trainer_num):
+               trainer_num,
+               pre_fetch=False):
     self._graph = graph
     self._train_nid = train_nid
     self._neighbor_num = neighbor_num
@@ -83,6 +89,7 @@ class SampleDeliver:
     self._proc = None
     self._one2all = True
     self._barrier_interval = barrier_interval
+    self._prefetch = pre_fetch
 
 
   def async_sample(self, epoch, batch_size, one2all=True):
@@ -149,9 +156,10 @@ class SampleDeliver:
 
   def one2one_sample(self, epoch_num, batch_size, train_nid, rank):
     # waiting trainers connecting
-    barrier = SampleBarrier('server', rank=rank)
     namebook = {0: '127.0.0.1:'+ str(self._sender_port + rank)}
-    sender = dgl.contrib.sampling.SamplerSender(namebook, net_type='socket')
+    if not self._prefetch:
+      barrier = SampleBarrier('server', rank=rank, port=8200)
+      sender = dgl.contrib.sampling.SamplerSender(namebook, net_type='socket')
     graph = self._graph[rank] if isinstance(self._graph, list) else self._graph
     sampler = dgl.contrib.sampling.NeighborSampler(
       graph, batch_size,
@@ -161,6 +169,11 @@ class SampleDeliver:
       prefetch=True, add_self_loop=False
     )
     for epoch in range(epoch_num):
+      if self._prefetch:
+        # create barrier and sender per epoch
+        port = 9000+(epoch+1)*100+rank
+        barrier = SampleBarrier('server', rank=rank, port=port)
+        sender = dgl.contrib.sampling.SamplerSender(namebook, net_type='socket')
       idx = 0
       for nf in sampler:
         sender.send(nf, 0)
@@ -170,8 +183,10 @@ class SampleDeliver:
       sender.signal(0)
       # barrier
       barrier.barrier()
+      if self._prefetch:
+        barrier._close()
+        del sender
       
-
   def __del__(self):
     if not self._proc is None:
       if self._one2all:
@@ -183,7 +198,7 @@ class SampleDeliver:
 
 class SampleBarrier:
   
-  def __init__(self, role, trainer_num=1, rank=0):
+  def __init__(self, role, trainer_num=1, rank=0, port=8200):
     """
     Params:
       role       :
@@ -194,7 +209,7 @@ class SampleBarrier:
         for one2one sampling
     """
     self._ip = '127.0.0.1'
-    self._port = 8200 + rank
+    self._port = port + rank
     self._role = role
     if self._role == 'server':
       print('start listening at: ' + self._ip + ' : ' + str(self._port))
@@ -225,3 +240,10 @@ class SampleBarrier:
         _ = sock.recv(128)
     else:
       self._socks.send('barrier'.encode('utf-8'))
+
+  def _close(self):
+    if self._role == 'server':
+      for sock in self._socks:
+        sock.close()
+    else:
+      self._socks.close()

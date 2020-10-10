@@ -71,7 +71,7 @@ def main(args):
       sub_trainnid.append(train_nid)
     hops = args.gnn_layers - 1 if args.preprocess else args.gnn_layers
     print('Expected trainer#: {}. Start sampling at server end...'.format(args.num_workers))
-    deliver = SampleDeliver(subgraph, sub_trainnid, args.num_neighbors, hops, args.num_workers)
+    deliver = SampleDeliver(subgraph, sub_trainnid, args.num_neighbors, hops, args.num_workers, args.pre_fetch)
     deliver.async_sample(args.n_epochs, args.batch_size, one2all=args.one2all)
     
   print('start running graph server on dataset: {}'.format(graph_name))
@@ -107,6 +107,8 @@ if __name__ == '__main__':
   parser.set_defaults(one2all=False)
 
   parser.add_argument("--preprocess", dest='preprocess', action='store_true')
+  parser.add_argument("--pre-fetch", action='store_true', 
+                      help='prefetch one iteration data or not')
   parser.set_defaults(preprocess=False)
   
   args = parser.parse_args()

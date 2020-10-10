@@ -14,15 +14,15 @@ from PaGraph.model.gcn_nssc import GCNSampling
 import PaGraph.data as data
 import PaGraph.storage as storage
 from PaGraph.parallel import SampleLoader
+from PaGraph.parallel import OverLap, OverLapInitSamplerAtWorker
 
 def init_process(rank, world_size, backend):
-      os.environ['MASTER_ADDR'] = '127.0.0.1'
+  os.environ['MASTER_ADDR'] = '127.0.0.1'
   os.environ['MASTER_PORT'] = '29501'
   dist.init_process_group(backend, rank=rank, world_size=world_size)
   torch.cuda.set_device(rank)
   torch.manual_seed(rank)
   print('rank [{}] process successfully launches'.format(rank))
-
 
 def trainer(rank, world_size, args, backend='nccl'):
   # init multi process
@@ -65,7 +65,9 @@ def trainer(rank, world_size, args, backend='nccl'):
   model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[rank])
   ctx = torch.device(rank)
 
-  if args.remote_sample:
+  if args.pre_fetch and args.remote_sample:
+    sampler = OverLapInitSamplerAtWorker(g, rank, one2all=False) # initialize sampler at worker processor
+  elif args.remote_sample:
     sampler = SampleLoader(g, rank, one2all=False)
   else:
     sampler = dgl.contrib.sampling.NeighborSampler(g, args.batch_size,
@@ -81,9 +83,10 @@ def trainer(rank, world_size, args, backend='nccl'):
   with torch.autograd.profiler.profile(enabled=(rank==0), use_cuda=True) as prof:
     for epoch in range(args.n_epochs):
       model.train()
-      epoch_start_time = time.time()
       step = 0
       for nf in sampler:
+        if step == 0:
+          epoch_start_time = time.time()
         with torch.autograd.profiler.record_function('gpu-load'):
           cacher.fetch_data(nf)
           batch_nids = nf.layer_parent_nid(-1)
