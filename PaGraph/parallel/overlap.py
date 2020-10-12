@@ -6,15 +6,17 @@ from . import SampleLoader
 from . import _utils
 import queue
 import time
+import threading
 
 class OverLap(object):
     r"""
     launch a deamon processer to overlap data loading from CPU and computation on GPU
     """
 
-    def __init__(self, sampler, num_workers=0):
+    def __init__(self, sampler, num_workers=0, load_local=False):
         self._sampler = sampler
         self._num_workers = num_workers
+        self._load_local = load_local
 
     def __iter__(self):
         if self._num_workers == 0:
@@ -23,13 +25,15 @@ class OverLap(object):
             return _DaemonProcessLoader(self)
 
 class OverLapInitSamplerAtWorker(object):
-    def __init__(self, graph, rank, one2all=False):
+    def __init__(self, graph, rank, one2all=False, load_local=False):
         self._graph = graph
         self._rank = rank
         self._one2all = one2all
         self._sampler = None
         self._num_workers = 1
         self._epoch = 0
+        self._load_local = load_local
+
     def __iter__(self):
         self._epoch += 1
         return _DaemonProcessLoader(self)
@@ -39,11 +43,13 @@ class _BaseDataLoaderIter(object):
         if loader._sampler is not None:
             self._sampler = loader._sampler
             self._num_workers = loader._num_workers
+            self._load_local = loader._load_local
         else:
             self._graph = loader._graph
             self._rank = loader._rank
             self._one2all = loader._one2all
             self._num_workers = 1
+            self._load_local = loader._load_local
 
     def __iter__(self):
         return self
@@ -68,6 +74,7 @@ class _DaemonProcessLoader(_BaseDataLoaderIter):
 
         self._mp_context = multiprocessing
         self._worker_result_queue = self._mp_context.Queue()
+        self._num_elem_in_queue = 4 # how much the worker faster than main processor
 
         # signal to shutdown the worker
         self._worker_done_event = self._mp_context.Event()
@@ -90,11 +97,24 @@ class _DaemonProcessLoader(_BaseDataLoaderIter):
         self._worker.start()
         self._worker_status = True
 
-        # may use pin memory thread to decouple the data_queue and worker_result_queue
-        self._data_queue = self._worker_result_queue
+        # may use load local thread to decouple the data_queue and worker_result_queue
+        if self._load_local:
+            self._load_local_thread_done_event = threading.Event()
+            self._data_queue = queue.Queue()
+            load_local_thread = threading.Thread(
+                target=_utils.load_local._load_local_loop,
+                args=(self._worker_result_queue, self._data_queue,
+                      torch.cuda.current_device(),
+                      self._load_local_thread_done_event,)
+            )
+            load_local_thread.daemon = True
+            load_local_thread.start()
+            self._load_local_thread = load_local_thread
+        else:
+            self._data_queue = self._worker_result_queue
 
         # prime the prefetch loop
-        for _ in range(2*self._num_workers):
+        for _ in range(self._num_elem_in_queue*self._num_workers):
             self._try_put_index()
         
     
@@ -129,14 +149,22 @@ class _DaemonProcessLoader(_BaseDataLoaderIter):
         return data
     
     def _get_data(self):
-        while True:
-            success, data = self._try_get_data()
-            if success:
-                return data
+        if self._load_local:
+            while self._load_local_thread.is_alive():
+                success, data = self._try_get_data()
+                if success:
+                    return data
+            else:
+                raise RuntimeError('load local thread exited unexpectedly')
+        else:
+            while True:
+                success, data = self._try_get_data()
+                if success:
+                    return data
     
     def _try_get_data(self, timeout=_utils.worker.MP_STATUS_CHECK_INTERVAL):
         try:
-            data = self._data_queue.get(timeout=0)
+            data = self._data_queue.get(timeout=timeout) # timeout is 5s
             return (True, data)
         except Exception as e:
             failed_workers = 0
@@ -151,7 +179,7 @@ class _DaemonProcessLoader(_BaseDataLoaderIter):
             raise
 
     def _try_put_index(self):
-        assert self._tasks_outstanding < 2 * self._num_workers
+        assert self._tasks_outstanding < self._num_elem_in_queue * self._num_workers
         for _ in range(self._num_workers):
             if self._worker_status:
                 break
@@ -166,6 +194,14 @@ class _DaemonProcessLoader(_BaseDataLoaderIter):
         if not self._shutdown:
             self._shutdown = True
             try:
+                # Exit load_local_thread first.
+                if hasattr(self, '_load_local_thread'):
+                    self._load_local_thread_done_event.set()
+                    self._worker_result_queue.put((None, None))
+                    self._load_local_thread.join()
+                    self._worker_result_queue.close()
+
+                # Exit workers now.
                 self._worker_done_event.set()
                 if self._worker_status:
                     self._shutdown_worker()

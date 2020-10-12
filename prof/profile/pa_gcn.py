@@ -66,7 +66,7 @@ def trainer(rank, world_size, args, backend='nccl'):
   ctx = torch.device(rank)
 
   if args.pre_fetch and args.remote_sample:
-    sampler = OverLapInitSamplerAtWorker(g, rank, one2all=False) # initialize sampler at worker processor
+    sampler = OverLapInitSamplerAtWorker(g, rank, one2all=False, load_local=True) # initialize sampler at worker processor
   elif args.remote_sample:
     sampler = SampleLoader(g, rank, one2all=False)
   else:
@@ -84,7 +84,9 @@ def trainer(rank, world_size, args, backend='nccl'):
     for epoch in range(args.n_epochs):
       model.train()
       step = 0
+      batch_tics = []
       for nf in sampler:
+        btic = time.time()
         if step == 0:
           epoch_start_time = time.time()
         with torch.autograd.profiler.record_function('gpu-load'):
@@ -104,9 +106,14 @@ def trainer(rank, world_size, args, backend='nccl'):
         if rank == 0 and step % 20 == 0:
           print('epoch [{}] step [{}]. Loss: {:.4f}'
                 .format(epoch + 1, step, loss.item()))
+        batch_tics.append(time.time()-btic)
+      print("collection of batch tics: sum {:.4f} mean {:.4f} max {:.4f} min {:.4f}".format(sum(batch_tics), sum(batch_tics)/len(batch_tics), max(batch_tics), min(batch_tics)))
       if rank == 0:
         epoch_dur.append(time.time() - epoch_start_time)
+        print(epoch_dur)
         print('Epoch average time: {:.4f}'.format(np.mean(np.array(epoch_dur[2:]))))
+      if not args.pre_fetch:
+        time.sleep(5)
       if cacher.log:
         miss_rate = cacher.get_miss_rate()
         print('Epoch average miss rate: {:.4f}'.format(miss_rate))

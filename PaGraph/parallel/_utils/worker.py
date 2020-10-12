@@ -3,8 +3,7 @@ import torch
 import queue
 from ..dataloader import SampleLoader
 import time
-
-MP_STATUS_CHECK_INTERVAL = 5.0
+from . import MP_STATUS_CHECK_INTERVAL, ExceptionWrapper
 
 class ManagerWatchdog(object):
     def __init__(self):
@@ -20,12 +19,11 @@ class _IterableDatasetStopIteration(object):
     def __init__(self):
         self._result = '_IterableDatasetStopIteration'
 
-class ExceptionWrapper(object):
-    def __init__(self, exc):
-        self._ext = 'ExceptionWrapper {}'.format(exc)
 
 def _worker_loop_init_sampler(loader, index_queue, data_queue, done_event, num_workers):
     try:
+        # torch.set_num_threads(1)
+
         init_exception = None
         try:
             barrier_port = 9000+loader._epoch*100
