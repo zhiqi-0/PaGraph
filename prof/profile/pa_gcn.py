@@ -14,7 +14,7 @@ from PaGraph.model.gcn_nssc import GCNSampling
 import PaGraph.data as data
 import PaGraph.storage as storage
 from PaGraph.parallel import SampleLoader
-from PaGraph.parallel import OverLap, OverLapInitSamplerAtWorker
+from PaGraph.parallel import OverLapInitSamplerAtWorker
 
 def init_process(rank, world_size, backend):
   os.environ['MASTER_ADDR'] = '127.0.0.1'
@@ -85,10 +85,9 @@ def trainer(rank, world_size, args, backend='nccl'):
       model.train()
       step = 0
       batch_tics = []
+      epoch_start_time = time.time()
       for nf in sampler:
         btic = time.time()
-        if step == 0:
-          epoch_start_time = time.time()
         with torch.autograd.profiler.record_function('gpu-load'):
           cacher.fetch_data(nf)
           batch_nids = nf.layer_parent_nid(-1)

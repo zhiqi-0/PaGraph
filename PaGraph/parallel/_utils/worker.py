@@ -20,14 +20,18 @@ class _IterableDatasetStopIteration(object):
         self._result = '_IterableDatasetStopIteration'
 
 
-def _worker_loop_init_sampler(loader, index_queue, data_queue, done_event, num_workers):
+def _worker_loop_init_sampler(num_epochs, graph, 
+                              rank, one2all, 
+                              index_queue, data_queue, 
+                              done_event):
     try:
         # torch.set_num_threads(1)
 
         init_exception = None
         try:
-            barrier_port = 9000+loader._epoch*100
-            sampler = SampleLoader(loader._graph, loader._rank, loader._one2all, barrier_port, True)
+            receiver = SampleLoader(graph, rank, one2all)
+            sampler = iter(receiver)
+            epoch = 1
         except Exception:
             init_exception = ExceptionWrapper('initializing the sampler')
             print("init the sampler error")
@@ -55,8 +59,12 @@ def _worker_loop_init_sampler(loader, index_queue, data_queue, done_event, num_w
                     data = next(sampler)
                 except Exception as e:
                     if isinstance(e, StopIteration):
+                        if epoch == num_epochs:
+                            iteration_end = True
+                        else:
+                            sampler = iter(receiver)
+                            epoch += 1
                         data = _IterableDatasetStopIteration()
-                        iteration_end = True
                     else:
                         # unexpected exception
                         data = ExceptionWrapper('other exceptions')
