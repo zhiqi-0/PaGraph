@@ -9,7 +9,7 @@ import torch.nn.functional as F
 import numpy as np
 import dgl
 
-from PaGraph.model.gcn_nssc import GCNSampling
+from PaGraph.model.gcn_nssc import GCNSampling, GCNInfer
 import PaGraph.data as data
 from PaGraph.parallel import SampleLoader
 
@@ -20,6 +20,12 @@ def init_process(rank, world_size, backend):
   torch.cuda.set_device(rank)
   torch.manual_seed(rank)
   print('rank [{}] process successfully launches'.format(rank))
+
+def count_layer_size(nodeflow):
+  layer_sizes = list()
+  for i in range(nodeflow.num_layers):
+    layer_sizes.append(nodeflow.layer_size(i))
+  print(layer_sizes)
 
 def trainer(rank, world_size, args, backend='nccl'):
   # init multi process
@@ -41,6 +47,7 @@ def trainer(rank, world_size, args, backend='nccl'):
   train_mask = torch.ByteTensor(train_mask)
   val_mask = torch.ByteTensor(val_mask)
   test_mask = torch.ByteTensor(test_mask)
+  n_test_samples = test_mask.sum().item()
 
   # prepare model
   num_hops = args.n_layers if args.preprocess else args.n_layers + 1
@@ -64,14 +71,29 @@ def trainer(rank, world_size, args, backend='nccl'):
   if args.remote_sample:
     sampler = SampleLoader(g, rank, one2all=False)
   else:
-    sampler = dgl.contrib.sampling.NeighborSampler(g, args.batch_size,
-                                                   args.num_neighbors,
-                                                   neighbor_type='in',
-                                                   shuffle=True,
-                                                   num_workers=args.num_workers,
-                                                   num_hops=num_hops,
-                                                   seed_nodes=train_nid,
-                                                   prefetch=True)
+    if args.layer_sample:
+      layer_sizes = list()
+      base_nodes = args.batch_size
+      for i in range(num_hops):
+        base_nodes *= args.num_neighbors
+        layer_sizes.append(base_nodes)
+      print(layer_sizes)
+      sampler = dgl.contrib.sampling.LayerSampler(g, args.batch_size,
+                                                  layer_sizes, #layer size
+                                                  neighbor_type='in',
+                                                  seed_nodes=train_nid,
+                                                  shuffle=True,
+                                                  num_workers=args.num_workers,
+                                                  prefetch=True)
+    else:
+      sampler = dgl.contrib.sampling.NeighborSampler(g, args.batch_size,
+                                                     args.num_neighbors,
+                                                     neighbor_type='in',
+                                                     shuffle=True,
+                                                     num_workers=args.num_workers,
+                                                     num_hops=num_hops,
+                                                     seed_nodes=train_nid,
+                                                     prefetch=True)
   profile_begin = time.time()
   with torch.autograd.profiler.profile(enabled=(rank==0), use_cuda=True) as prof:
     for epoch in range(args.n_epochs):
@@ -96,6 +118,29 @@ def trainer(rank, world_size, args, backend='nccl'):
       if rank == 0:
         epoch_dur.append(time.time() - epoch_start_time)
         print('Epoch average time: {:.4f}'.format(np.mean(np.array(epoch_dur[2:]))))
+      if args.validate:
+        infer_model = GCNInfer(args.feat_size, args.n_hidden, n_classes, args.n_layers, F.relu)
+        infer_model.cuda()
+
+        for infer_param, param in zip(infer_model.parameters(), model.parameters()):
+          infer_param.data.copy_(param.data)
+        
+        num_acc = 0.0
+        for nf in dgl.contrib.sampling.NeighborSampler(g, args.batch_size,
+                                                       g.number_of_nodes(),
+                                                       neighbor_type='in',
+                                                       num_workers=args.num_workers,
+                                                       num_hops=num_hops,
+                                                       seed_nodes=test_nid,
+                                                       prefetch=True):
+          nf.copy_from_parent(ctx=ctx)
+          infer_model.eval()
+          with torch.no_grad():
+              pred = infer_model(nf)
+              batch_nids = nf.layer_parent_nid(-1)
+              batch_labels = labels[batch_nids].to(device=pred.device)
+              num_acc += (pred.argmax(dim=1) == batch_labels).sum().cpu().item()
+        print("Test Accuracy {:.4f}". format(num_acc / n_test_samples))
   print('Total Time: {:.4f}s'.format(time.time() - profile_begin))
   if rank == 0:
     print(prof.key_averages().table(sort_by='cuda_time_total'))
@@ -133,6 +178,10 @@ if __name__ == '__main__':
                       help="number of neighbors to be sampled")
   parser.add_argument("--num-workers", type=int, default=16)
   parser.add_argument("--remote-sample", dest='remote_sample', action='store_true')
+  parser.set_defaults(remote_sample=False)
+  parser.add_argument("--layer-sample", dest='layer_sample', action='store_true')
+  parser.set_defaults(remote_sample=False)
+  parser.add_argument("--validate", dest='validate', action='store_true')
   parser.set_defaults(remote_sample=False)
 
 
