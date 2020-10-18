@@ -76,7 +76,6 @@ def trainer(rank, world_size, args, backend='nccl'):
       num_hops=num_hops, seed_nodes=train_nid,
       prefetch=True
     )
-
   # start training
   epoch_dur = []
   tic = time.time()
@@ -166,4 +165,3 @@ if __name__ == '__main__':
   gpu_num = len(args.gpu.split(','))
 
   mp.spawn(trainer, args=(gpu_num, args), nprocs=gpu_num, join=True)
-  

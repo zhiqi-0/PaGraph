@@ -68,6 +68,12 @@ class SampleLoader:
 
   def __del__(self):
     del self._recver
+
+class PaGraphIterableDataset(torch.utils.data.IterableDataset):
+  def __init__(self, itera):
+    self._itera = itera
+  def __iter__(self):
+    return self._itera 
   
 
 class SampleDeliver:
