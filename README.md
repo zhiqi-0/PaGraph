@@ -2,6 +2,7 @@
 
 Scaling GNN Training on Large Graphs via Computation-aware Caching and Partitioning. Build based on DGL with PyTorch backend.
 
+
 ## Prerequisite
 
 * Python 3
@@ -96,13 +97,13 @@ For more instructions, checkout server launch files.
   * DGL benchmark
 
     ```bash
-    $ python prof/profile/dgl_gcn.py --dataset xxx/datasetfolder --gpu [gpu indices, splitted by ','] [--preprocess] [--remote-sample]
+    $ python examples/profile/dgl_gcn.py --dataset xxx/datasetfolder --gpu [gpu indices, splitted by ','] [--preprocess] [--remote-sample]
     ```
 
   * PaGraph
 
     ```bash
-    $ python prof/profile/pa_gcn.py --dataset xxx/datasetfolder --gpu [gpu indices, splitted by ','] [--preprocess] [--remote-sample]
+    $ python examples/profile/pa_gcn.py --dataset xxx/datasetfolder --gpu [gpu indices, splitted by ','] [--preprocess] [--remote-sample]
     ```
 
 Note: `--remote-sample` is for enabling isolation. This should be cooperated with server command `--sample`.
@@ -123,8 +124,31 @@ Partition is aware of GNN model layers. Please guarantee the consistency of `--n
 
 * Pytorch Profiler:
 
-  Run script in `prof/` as mentioned above.
+  Run script in `examples/` as mentioned above.
 
+## Citing PaGraph
+
+```
+@inproceedings{lin2020pagraph,
+  title={PaGraph: Scaling GNN training on large graphs via computation-aware caching},
+  author={Lin, Zhiqi and Li, Cheng and Miao, Youshan and Liu, Yunxin and Xu, Yinlong},
+  booktitle={Proceedings of the 11th ACM Symposium on Cloud Computing},
+  pages={401--415},
+  year={2020}
+}
+```
+
+```
+@article{bai2021efficient,
+  title={Efficient Data Loader for Fast Sampling-based GNN Training on Large Graphs},
+  author={Bai, Youhui and Li, Cheng and Lin, Zhiqi and Wu, Yufei and Miao, Youshan and Liu, Yunxin and Xu, Yinlong},
+  journal={IEEE Transactions on Parallel \& Distributed Systems},
+  number={01},
+  pages={1--1},
+  year={2021},
+  publisher={IEEE Computer Society}
+}
+```
 
 ## License
 
