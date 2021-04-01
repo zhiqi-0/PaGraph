@@ -2,6 +2,8 @@
 
 Scaling GNN Training on Large Graphs via Computation-aware Caching and Partitioning. Build based on DGL with PyTorch backend.
 
+PaGraph in `master` branch supports data caching and graph partition ([paper](https://dl.acm.org/doi/abs/10.1145/3419111.3421281)). In `overlap` branch it additionally supports overlapping data loading and GPU computation ([paper](https://www.computer.org/csdl/journal/td/5555/01/09376972/1rUNnBQRXsk)). 
+
 
 ## Prerequisite
 
@@ -153,3 +155,7 @@ Partition is aware of GNN model layers. Please guarantee the consistency of `--n
 ## License
 
 This project is under MIT License. 
+
+## Future Plan
+
+We plan to support PaGraph on [MindSpore](https://www.mindspore.cn/en)
