@@ -22,8 +22,10 @@ def in_neighbors_hop(csc_adj, nid, hops):
     nids = []
     for depth in range(hops):
       neighs = nids[-1] if len(nids) != 0 else [nid]
+      in_neighs = []
       for n in neighs:
-        nids.append(in_neighbors(csc_adj, n))
+        in_neighs += in_neighbors(csc_adj, n)
+      nids.append(in_neighs)
     return np.unique(np.hstack(nids))
 
 
